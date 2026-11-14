@@ -1,5 +1,6 @@
 import { requireStaff } from "@/lib/auth";
 import BulkUpload from "@/components/bulk-upload";
+import { ReindexDocuments } from "@/components/reindex-documents";
 
 export default async function Documents() {
   const { supabase } = await requireStaff();
@@ -15,6 +16,7 @@ export default async function Documents() {
       <p className="mt-2 text-sm text-slate-500">Upload legal documents and manage your local files.</p>
       <div className="mt-6">
         <BulkUpload />
+        <div className="mb-5"><ReindexDocuments documents={(docs ?? []).map((doc) => ({ id: doc.id, title: doc.title }))} /></div>
       </div>
       <div className="card mt-6 overflow-hidden">
         <div className="border-b p-5 font-semibold">Knowledge documents</div>

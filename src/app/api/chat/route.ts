@@ -6,7 +6,7 @@ import { detectLanguage } from "@/lib/language";
 import { retrieveLegalContext } from "@/lib/rag/retrieve";
 import { answerWithSources } from "@/lib/rag/answer";
 import { rateLimit } from "@/lib/rate-limit";
-const schema=z.object({question:z.string().min(1).max(6000),conversationId:z.string().uuid().nullable().optional()});
+const schema=z.object({question:z.string().min(1).max(6000),conversationId:z.string().uuid().nullable().optional(),analysisMode:z.boolean().optional()});
 
 function casualReply(question: string, language: ReturnType<typeof detectLanguage>): string | null {
  const q=question.trim().toLowerCase().replace(/[!?.,،؛]+$/g, "");
@@ -27,12 +27,17 @@ export async function POST(req:Request){try{
  if(conversationId){const {data}=await supabase.from("conversations").select("id").eq("id",conversationId).eq("user_id",user.id).single();if(!data)return NextResponse.json({error:"Conversation not found"},{status:404});}
  else {const {data,error}=await supabase.from("conversations").insert({lawyer_id:profile.lawyer_id,user_id:user.id,title:body.question.slice(0,70)}).select("id").single();if(error)throw error;conversationId=data.id;}
  const language=detectLanguage(body.question);
+ const {data:historyRows,error:historyError}=conversationId
+  ? await supabase.from("messages").select("role,content").eq("conversation_id",conversationId).eq("lawyer_id",profile.lawyer_id).order("created_at",{ascending:false}).limit(8)
+  : {data:[],error:null};
+ if(historyError)throw historyError;
+ const conversationHistory=((historyRows??[]) as Array<{role:string;content:string}>).reverse().filter((m)=>m.role==="user"||m.role==="assistant").map((m)=>({role:m.role as "user"|"assistant",content:m.content}));
  const {error:userErr}=await supabase.from("messages").insert({lawyer_id:profile.lawyer_id,conversation_id:conversationId,role:"user",content:body.question,language});
  if(userErr)throw userErr;
  const smallTalk = casualReply(body.question, language);
  const result = smallTalk
   ? { answer: smallTalk, citations: [] }
-  : await answerWithSources(body.question,language,await retrieveLegalContext(supabase,profile.lawyer_id,body.question,Number(process.env.RAG_TOP_K??8)));
+  : await answerWithSources(body.question,language,await retrieveLegalContext(supabase,profile.lawyer_id,body.question,Number(process.env.RAG_TOP_K??8)),conversationHistory,Boolean(body.analysisMode));
  const {error:assistantErr}=await supabase.from("messages").insert({lawyer_id:profile.lawyer_id,conversation_id:conversationId,role:"assistant",content:result.answer,language,citations:result.citations});
  if(assistantErr)throw assistantErr;
  await supabase.from("conversations").update({updated_at:new Date().toISOString()}).eq("id",conversationId);

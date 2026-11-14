@@ -5,7 +5,21 @@ export async function extractDocument(buffer: Buffer, mime: string, filename: st
   const ext = filename.toLowerCase().split(".").pop();
   let text = "", pages: number | undefined;
   if (mime === "application/pdf" || ext === "pdf") {
-    const result = await pdf(buffer); text = result.text; pages = result.numpages;
+    const result = await pdf(buffer, {
+      pagerender: async (pageData) => {
+        const content = await pageData.getTextContent({ normalizeWhitespace: false, disableCombineTextItems: false });
+        let lastY: number | undefined;
+        let rendered = `\n\n[[PAGE:${pageData.pageNumber}]]\n`;
+        for (const item of content.items) {
+          if (!("str" in item)) continue;
+          const y = "transform" in item && Array.isArray(item.transform) ? item.transform[5] : undefined;
+          if (lastY !== undefined && y !== undefined && y !== lastY) rendered += "\n";
+          rendered += item.str;
+          lastY = y;
+        }
+        return rendered;
+      },
+    }); text = result.text; pages = result.numpages;
   } else if (mime.includes("word") || ext === "docx") {
     const result = await mammoth.extractRawText({ buffer }); text = result.value;
   } else if (mime.startsWith("text/") || ext === "txt") {

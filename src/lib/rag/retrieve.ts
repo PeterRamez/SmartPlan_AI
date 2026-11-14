@@ -1,170 +1,151 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { embedText } from "@/lib/ai/embeddings";
+import { parseLegalQuery } from "./legal-query";
 
 export type RetrievedSource = {
   id: string;
   document_id: string;
   content: string;
   law_name: string | null;
+  law_code?: string | null;
   article_number: string | null;
   paragraph_number: string | null;
   page_number: number | null;
   similarity: number;
   title?: string;
+  filename?: string;
+  metadata?: Record<string, unknown>;
 };
 
-type ChunkRow = Omit<RetrievedSource, "similarity" | "title"> & {
+type ChunkRow = Omit<RetrievedSource, "similarity" | "title" | "filename"> & {
   similarity?: number | null;
+  metadata?: Record<string, unknown> | null;
 };
-
-type DocumentTitleRow = {
-  id: string;
-  title: string | null;
-  filename: string;
-};
-
+type DocumentTitleRow = { id: string; title: string | null; filename: string; law_code?: string | null };
 const MAX_PROVISION_EXPANSION = 12;
 
-/**
- * Extract German statutory provision numbers from citations such as:
- * § 444, §§ 434, 437 and § 123 Abs. 1.
- * It intentionally does not expand numeric ranges because range semantics
- * vary across legal citation styles.
- */
 export function extractProvisionReferences(text: string): string[] {
   const refs = new Set<string>();
-  const pattern = /§{1,2}\s*((?:\d+[a-z]?)(?:\s*(?:,|und|and|sowie)\s*\d+[a-z]?)*)/gi;
+  const pattern = /§{1,2}\s*((?:\d+[a-z]?)(?:\s*(?:,|und|and|sowie|or)\s*\d+[a-z]?)*)/gi;
   for (const match of text.matchAll(pattern)) {
-    const numbers = match[1]?.match(/\d+[a-z]?/gi) ?? [];
-    for (const number of numbers) refs.add(number.toLowerCase());
+    for (const number of match[1]?.match(/\d+[a-z]?/gi) ?? []) refs.add(number.toLowerCase());
   }
   return [...refs];
 }
 
 function reciprocalRankFusion(
-  semanticRows: ChunkRow[],
-  keywordRows: ChunkRow[],
-  exactRows: ChunkRow[],
-  topK: number
+  semanticRows: ChunkRow[], keywordRows: ChunkRow[], exactRows: ChunkRow[], topK: number,
+  lawCode: string | null, query: string
 ): RetrievedSource[] {
   const scores = new Map<string, { row: ChunkRow; score: number }>();
-  const addRanked = (rows: ChunkRow[], weight: number) => {
-    rows.forEach((row, index) => {
-      const score = weight / (60 + index + 1);
-      const existing = scores.get(row.id);
-      if (existing) existing.score += score;
-      else scores.set(row.id, { row, score });
-    });
-  };
-
-  // Reciprocal-rank fusion prevents incomparable semantic similarity and
-  // full-text rank values from being treated as if they shared one scale.
+  const addRanked = (rows: ChunkRow[], weight: number) => rows.forEach((row, index) => {
+    // A strict law-code match is preferred when the question names a statute.
+    if (lawCode && row.law_code && row.law_code !== lawCode) return;
+    const score = weight / (60 + index + 1);
+    const existing = scores.get(row.id);
+    if (existing) existing.score += score;
+    else scores.set(row.id, { row, score });
+  });
   addRanked(semanticRows, 1);
-  addRanked(keywordRows, 1);
-  // Exact statutory provision matches are a strong signal, but not a claim
-  // that the provision is legally applicable to the facts.
-  addRanked(exactRows, 2);
-
-  return [...scores.values()]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK)
-    .map(({ row, score }) => ({
-      id: row.id,
-      document_id: row.document_id,
-      content: row.content,
-      law_name: row.law_name,
-      article_number: row.article_number,
-      paragraph_number: row.paragraph_number,
-      page_number: row.page_number,
-      similarity: score
-    }));
+  addRanked(keywordRows, 1.15);
+  addRanked(exactRows, 3);
+  // Deterministic second-stage reranking rewards legal metadata matches and
+  // query-term overlap without adding a second model call or provider cost.
+  const queryTokens = new Set(query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
+  const candidates = [...scores.values()].map(({ row, score }) => {
+    const provisionMatch = row.article_number && exactRows.some((exact) => exact.id === row.id) ? 1 : 0;
+    const lawMatch = lawCode && row.law_code === lawCode ? 1 : 0;
+    const lexical = queryTokens.size ? [...queryTokens].filter((token) => row.content.toLowerCase().includes(token)).length / queryTokens.size : 0;
+    return { row, score: score + provisionMatch * 0.02 + lawMatch * 0.01 + lexical * 0.005 };
+  });
+  return candidates.sort((a, b) => b.score - a.score).slice(0, topK).map(({ row, score }) => ({
+    id: row.id, document_id: row.document_id, content: row.content,
+    law_name: row.law_name, law_code: row.law_code ?? null,
+    article_number: row.article_number, paragraph_number: row.paragraph_number,
+    page_number: row.page_number, metadata: row.metadata ?? {}, similarity: score,
+  }));
 }
 
 export async function retrieveLegalContext(
-  supabase: SupabaseClient,
-  lawyerId: string,
-  query: string,
-  topK = 8
+  supabase: SupabaseClient, lawyerId: string, query: string, topK = 8
 ): Promise<RetrievedSource[]> {
   const safeTopK = Math.max(1, Math.min(Math.floor(topK) || 8, 20));
-  const vector = await embedText(query);
+  const parsed = parseLegalQuery(query);
+  const selectFields = "id,document_id,content,law_name,law_code,article_number,paragraph_number,page_number,metadata";
+  let semanticRows: ChunkRow[] = [];
+  let semanticFailure: string | null = null;
 
-  const { data: semantic, error } = await supabase.rpc("match_document_chunks", {
-    query_embedding: `[${vector.join(",")}]`,
-    match_count: safeTopK * 3,
-    filter_lawyer_id: lawyerId
-  });
+  // Exact and keyword retrieval remain usable even if the embedding provider is
+  // temporarily unavailable. This is especially important for explicit § lookups.
+  try {
+    const vector = await embedText(query);
+    const semanticCall = parsed.lawCode
+      ? supabase.rpc("match_document_chunks_by_law", {
+          query_embedding: `[${vector.join(",")}]`, match_count: safeTopK * 4,
+          filter_lawyer_id: lawyerId, filter_law_code: parsed.lawCode,
+        })
+      : supabase.rpc("match_document_chunks", {
+          query_embedding: `[${vector.join(",")}]`, match_count: safeTopK * 4,
+          filter_lawyer_id: lawyerId,
+        });
+    const { data, error } = await semanticCall;
+    if (error) throw new Error(error.message);
+    semanticRows = (data ?? []) as ChunkRow[];
+  } catch (error) {
+    semanticFailure = error instanceof Error ? error.message : "Unknown vector retrieval error";
+  }
 
-  if (error) throw new Error(`Vector retrieval failed: ${error.message}`);
-
-  const { data: keyword, error: keywordError } = await supabase
-    .from("document_chunks")
-    .select("id,document_id,content,law_name,article_number,paragraph_number,page_number")
-    .eq("lawyer_id", lawyerId)
-    .textSearch("search_vector", query, { type: "plain" })
-    .limit(safeTopK * 3);
-
+  let keywordQuery = supabase.from("document_chunks").select(selectFields).eq("lawyer_id", lawyerId);
+  if (parsed.lawCode) keywordQuery = keywordQuery.eq("law_code", parsed.lawCode);
+  const { data: keyword, error: keywordError } = await keywordQuery
+    .textSearch("search_vector", parsed.normalizedQuery, { type: "plain", config: "simple" })
+    .limit(safeTopK * 4);
   if (keywordError) throw new Error(`Keyword retrieval failed: ${keywordError.message}`);
 
-  const semanticRows = (semantic ?? []) as ChunkRow[];
-  const keywordRows = (keyword ?? []) as ChunkRow[];
-
-  // Retrieve exact statutory provisions explicitly named by the user.
-  const questionRefs = extractProvisionReferences(query);
-  let explicitRows: ChunkRow[] = [];
-  if (questionRefs.length) {
-    const { data, error: exactError } = await supabase
-      .from("document_chunks")
-      .select("id,document_id,content,law_name,article_number,paragraph_number,page_number")
-      .eq("lawyer_id", lawyerId)
-      .in("article_number", questionRefs.slice(0, MAX_PROVISION_EXPANSION))
-      .limit(safeTopK * 3);
+  let exactRows: ChunkRow[] = [];
+  if (parsed.provisionNumbers.length) {
+    let exactQuery = supabase.from("document_chunks").select(selectFields)
+      .eq("lawyer_id", lawyerId).in("article_number", parsed.provisionNumbers.slice(0, MAX_PROVISION_EXPANSION));
+    if (parsed.lawCode) exactQuery = exactQuery.eq("law_code", parsed.lawCode);
+    const { data, error: exactError } = await exactQuery.limit(safeTopK * 5);
     if (exactError) throw new Error(`Exact provision retrieval failed: ${exactError.message}`);
-    explicitRows = (data ?? []) as ChunkRow[];
+    exactRows = (data ?? []) as ChunkRow[];
   }
 
-  // Expand one hop of statutory cross-references from the best initial hits.
-  // This helps retrieve provisions such as §§ 439, 440 and 441 referenced by § 437.
-  const seedRows = [...semanticRows, ...keywordRows].slice(0, safeTopK * 2);
+  // Expand cross-references only inside the requested law. This prevents
+  // unrelated GewO provisions from contaminating a BGB query.
+  const keywordRows = (keyword ?? []) as ChunkRow[];
+  const seedRows = [...semanticRows, ...keywordRows, ...exactRows].slice(0, safeTopK * 3);
   const referenced = new Set<string>();
-  for (const row of seedRows) {
-    for (const ref of extractProvisionReferences(row.content)) referenced.add(ref);
-  }
-  for (const ref of questionRefs) referenced.delete(ref);
+  for (const row of seedRows) for (const ref of extractProvisionReferences(row.content)) referenced.add(ref);
+  for (const ref of parsed.provisionNumbers) referenced.delete(ref);
   const expansionRefs = [...referenced].slice(0, MAX_PROVISION_EXPANSION);
-
-  let expandedRows: ChunkRow[] = [];
   if (expansionRefs.length) {
-    const { data, error: expansionError } = await supabase
-      .from("document_chunks")
-      .select("id,document_id,content,law_name,article_number,paragraph_number,page_number")
-      .eq("lawyer_id", lawyerId)
-      .in("article_number", expansionRefs)
-      .limit(safeTopK * 3);
+    let expansionQuery = supabase.from("document_chunks").select(selectFields)
+      .eq("lawyer_id", lawyerId).in("article_number", expansionRefs);
+    if (parsed.lawCode) expansionQuery = expansionQuery.eq("law_code", parsed.lawCode);
+    const { data, error: expansionError } = await expansionQuery.limit(safeTopK * 3);
     if (expansionError) throw new Error(`Cross-reference retrieval failed: ${expansionError.message}`);
-    expandedRows = (data ?? []) as ChunkRow[];
+    exactRows = [...exactRows, ...((data ?? []) as ChunkRow[])];
   }
 
   const ranked = reciprocalRankFusion(
-    semanticRows,
-    keywordRows,
-    [...explicitRows, ...expandedRows],
-    safeTopK
+    semanticRows, keywordRows, exactRows, safeTopK, parsed.lawCode, parsed.normalizedQuery
   );
-  if (!ranked.length) return [];
-
-  const documentIds = [...new Set(ranked.map((row) => row.document_id))];
-  const { data: docs, error: documentsError } = await supabase
-    .from("legal_documents")
-    .select("id,title,filename")
-    .in("id", documentIds);
-
-  if (documentsError) throw new Error(`Document title lookup failed: ${documentsError.message}`);
-
-  const titles = new Map<string, string>();
-  for (const document of (docs ?? []) as DocumentTitleRow[]) {
-    titles.set(document.id, document.title || document.filename);
+  if (!ranked.length) {
+    if (semanticFailure) throw new Error(`Vector retrieval unavailable and no keyword/exact matches were found: ${semanticFailure}`);
+    return [];
   }
 
-  return ranked.map((row) => ({ ...row, title: titles.get(row.document_id) }));
+  const documentIds = [...new Set(ranked.map((row) => row.document_id))];
+  const { data: docs, error: documentsError } = await supabase.from("legal_documents")
+    .select("id,title,filename,law_code").in("id", documentIds);
+  if (documentsError) throw new Error(`Document title lookup failed: ${documentsError.message}`);
+  const titles = new Map<string, DocumentTitleRow>();
+  for (const document of (docs ?? []) as DocumentTitleRow[]) titles.set(document.id, document);
+  return ranked.map((row) => {
+    const doc = titles.get(row.document_id);
+    return { ...row, title: doc?.title || doc?.filename || "Untitled", filename: doc?.filename,
+      law_code: row.law_code ?? doc?.law_code ?? null };
+  });
 }

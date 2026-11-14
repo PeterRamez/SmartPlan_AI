@@ -7,8 +7,10 @@ Browser -> Next.js App Router -> authenticated route handlers
                                -> embedding adapter (Cloudflare BGE-M3/Ollama/custom)
 Google Drive -> discovery -> ingestion_jobs/files -> bounded batch processor
              -> extraction -> legal parser/chunker -> embeddings -> document_chunks
-Chat -> language detect -> query embedding + Postgres FTS -> reciprocal-rank fusion
-     -> exact + one-hop statutory cross-reference expansion -> retrieved source IDs
+Chat -> conversation context + language detect + legal query parser (law code / § number)
+     -> statute-filtered vector search + Postgres FTS + exact paragraph lookup
+     -> reciprocal-rank fusion + deterministic legal reranking
+     -> same-statute cross-reference expansion -> retrieved source IDs
      -> fact/issue/condition-grounded generation -> optional second-pass audit
      -> citation allow-list validation
 ```
@@ -30,3 +32,10 @@ Only retrieved chunks are passed as evidence. The model is instructed to abstain
 ## Legal reasoning safeguards
 
 The answer prompt requires the model to distinguish established facts, disputed allegations, missing facts, and legal conditions. It prohibits inferring intent or Arglist from the mere existence of a defect and requires disclosure when a necessary statutory provision is absent from the retrieved evidence. Citation validation checks source-marker bounds and maps valid markers back to retrieved chunk IDs; it does not establish semantic entailment or legal correctness. Lawyer review remains necessary.
+
+
+## Statute-aware indexing and retrieval
+`legal_documents.law_code` and `document_chunks.law_code` identify the statute (for example BGB or GewO). The code is inferred from the source filename before scanning text, because a statute may cite other laws. When a query explicitly names a statute, vector, full-text, exact-provision, and cross-reference retrieval are all scoped to that statute and tenant. Migration `0003_legal_aware_retrieval.sql` adds this metadata, indexes, the filtered vector RPC, and evaluation history. Re-index stored extracted text after applying the migration so chunk metadata reflects the new parser.
+
+## RAG evaluation and case analysis
+Staff can open `/rag-evaluation` to run a small exact-provision regression suite and inspect retrieved document, statute, paragraph, page, and chunk identifiers. The chat can include the previous eight messages from the same conversation as case context, and its optional structured case-analysis mode separates issues, established/disputed facts, legal rules, application, options, and missing facts. Conversation history is context only; legal rules must still come from retrieved statutory excerpts.

@@ -1,18 +1,22 @@
 import { parseGermanLegalStructure } from "./legal-parser";
+import { inferLawCode } from "../rag/legal-query";
 
 export type LegalChunk = {
   content: string;
   chunkIndex: number;
   articleNumber?: string;
   paragraphNumber?: string;
+  lawCode?: string;
+  pageNumber?: number;
   metadata: Record<string, unknown>;
 };
 
-export function chunkLegalText(text: string, maxChars = 2200): LegalChunk[] {
+export function chunkLegalText(text: string, maxChars = 2200, filename = ""): LegalChunk[] {
   if (!Number.isInteger(maxChars) || maxChars < 100) {
     throw new Error("maxChars must be an integer of at least 100");
   }
   const units = parseGermanLegalStructure(text);
+  const lawCode = inferLawCode(filename, text);
   const chunks: LegalChunk[] = [];
 
   const add = (content: string, unit: (typeof units)[number], metadata: Record<string, unknown> = {}) => {
@@ -22,7 +26,17 @@ export function chunkLegalText(text: string, maxChars = 2200): LegalChunk[] {
       chunkIndex: chunks.length,
       articleNumber: unit.articleNumber,
       paragraphNumber: unit.paragraphNumber,
-      metadata: { sectionName: unit.sectionName, chapterName: unit.chapterName, ...metadata },
+      lawCode: lawCode ?? undefined,
+      pageNumber: unit.pageNumber,
+      metadata: {
+        lawCode,
+        pageNumber: unit.pageNumber ?? null,
+        lawName: lawCode,
+        sectionName: unit.sectionName,
+        chapterName: unit.chapterName,
+        provisionKind: unit.articleNumber ? "statutory_provision" : "document_text",
+        ...metadata,
+      },
     });
   };
 
@@ -32,6 +46,8 @@ export function chunkLegalText(text: string, maxChars = 2200): LegalChunk[] {
       continue;
     }
 
+    // Keep paragraph boundaries whenever possible. Long individual paragraphs
+    // are split into linked parts while retaining the same provision metadata.
     const paragraphs = unit.content.split(/\n\s*\n/);
     let current = "";
     const flush = () => {
@@ -46,6 +62,7 @@ export function chunkLegalText(text: string, maxChars = 2200): LegalChunk[] {
           add(paragraph.slice(offset, offset + maxChars), unit, {
             linkedLongProvision: true,
             part: Math.floor(offset / maxChars) + 1,
+            totalParts: Math.ceil(paragraph.length / maxChars),
           });
         }
         continue;

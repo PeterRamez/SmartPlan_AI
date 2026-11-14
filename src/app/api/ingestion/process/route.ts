@@ -21,13 +21,15 @@ export async function POST(req:Request){try{
    const extracted=await extractDocument(buffer,mime,item.filename);
    if(extracted.needsOcr){await supabase.from("legal_documents").update({status:"needs_ocr",extracted_text:extracted.text,error_message:"Scanned or near-empty PDF requires OCR."}).eq("id",item.document_id);await supabase.from("ingestion_files").update({status:"needs_ocr"}).eq("id",item.id);continue;}
    if(!extracted.text)throw new Error("No extractable text found");
-   const chunks=chunkLegalText(extracted.text);
+   const chunks=chunkLegalText(extracted.text,2200,item.filename);
    for(const c of chunks){
     const vector=await embedText(c.content);
-    const {error:insertError}=await supabase.from("document_chunks").upsert({lawyer_id:profile.lawyer_id,document_id:item.document_id,chunk_index:c.chunkIndex,content:c.content,article_number:c.articleNumber??null,paragraph_number:c.paragraphNumber??null,metadata:c.metadata,embedding:vector},{onConflict:"document_id,chunk_index"});
+    const {error:insertError}=await supabase.from("document_chunks").upsert({lawyer_id:profile.lawyer_id,document_id:item.document_id,chunk_index:c.chunkIndex,content:c.content,article_number:c.articleNumber??null,paragraph_number:c.paragraphNumber??null,page_number:c.pageNumber??null,law_code:c.lawCode??null,law_name:c.lawCode??null,metadata:c.metadata,embedding:vector},{onConflict:"document_id,chunk_index"});
     if(insertError)throw insertError;
    }
-   await supabase.from("legal_documents").update({status:"processed",extracted_text:extracted.text,error_message:null,metadata:{pages:extracted.pages,chunkCount:chunks.length}}).eq("id",item.document_id);
+   const {error:staleError}=await supabase.from("document_chunks").delete().eq("lawyer_id",profile.lawyer_id).eq("document_id",item.document_id).gte("chunk_index",chunks.length);
+   if(staleError)throw staleError;
+   await supabase.from("legal_documents").update({status:"processed",extracted_text:extracted.text,law_code:chunks.find(c=>c.lawCode)?.lawCode??null,error_message:null,metadata:{pages:extracted.pages,chunkCount:chunks.length,lawCode:chunks.find(c=>c.lawCode)?.lawCode??null}}).eq("id",item.document_id);
    await supabase.from("ingestion_files").update({status:"completed",error_message:null}).eq("id",item.id);processed++;
   }catch(e){failed++;const msg=e instanceof Error?e.message:"Unknown processing error";await supabase.from("ingestion_files").update({status:item.attempts+1>=3?"failed":"queued",error_message:msg}).eq("id",item.id);if(item.document_id)await supabase.from("legal_documents").update({status:item.attempts+1>=3?"failed":"pending",error_message:msg}).eq("id",item.document_id);}
  }

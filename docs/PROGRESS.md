@@ -102,3 +102,34 @@ Retry dependency installation when npm registry access is available. Then run `n
 
 
 - Added an optional second-pass legal answer audit controlled by `LEGAL_ANSWER_REVIEW=true`. It checks the draft against the same question and retrieved excerpts for unsupported factual assumptions, missing legal conditions, unsupported claims, and missing-source disclosure. It uses the same configured model, adds one additional generation request per answer, and is not an independent legal opinion or guaranteed semantic proof. It defaults to `false` to avoid extra inference usage until the user opts in.
+
+## Legal-aware retrieval and evaluation dashboard (2026-11-14)
+
+### Implemented in source
+- Added legal query parsing for common German statute codes and explicit provision references, including plural references such as `§§ 434, 437`.
+- Added `law_code` metadata to legal documents and chunks; ingestion now derives the code from the source filename first (to avoid classifying a GewO document as BGB merely because it cites BGB).
+- Added migration `0003_legal_aware_retrieval.sql` with metadata backfill, statute/provision indexes, and tenant-scoped law-filtered vector search.
+- Retrieval now uses exact provision lookup, law-code filtering for vector/full-text/exact search, reciprocal-rank fusion, and same-statute cross-reference expansion.
+- Added a staff-only RAG evaluation page and regression API for BGB §§ 437, 439, 442 and GewO § 34. Each run stores the expected provision, retrieved source metadata, and exact-match result.
+- Added unit tests for legal query parsing, filename-first law-code inference, and chunk metadata.
+
+### Important migration / data requirements
+- Apply `supabase/migrations/0003_legal_aware_retrieval.sql` in Supabase before deploying this revision. The new law-filtered vector RPC is required for queries that explicitly name a statute.
+- Existing document chunks are backfilled only when their source filename identifies a known statute. Documents with ambiguous filenames need manual metadata assignment or re-ingestion.
+- Reprocess/re-ingest the BGB and GewO files after migration so each chunk receives correct `law_code` metadata. The evaluation page is only meaningful after this.
+- `page_number` remains null where the current PDF extraction pipeline does not preserve per-chunk page offsets; the app does not fabricate page numbers.
+- Exact-match evaluation measures whether the expected law code and paragraph appear in the retrieved top 8. It is a retrieval regression signal, not a legal correctness certification.
+
+### Verification status
+- Source edits and migration were reviewed locally.
+- Full dependency installation, TypeScript, lint, Vitest, and production build still need to be run; no successful result is claimed yet.
+- No live Supabase migration, Cloudflare request, Vercel deployment, or production re-indexing has been performed.
+
+- Added a staff-triggered re-index endpoint and UI action. It rebuilds existing chunks from stored `extracted_text`, recalculates BGE-M3 embeddings, and writes statute metadata; no original Drive download is required for already extracted documents.
+- Added chat conversation context (the previous eight messages in the same authorized conversation) and an optional structured case-analysis mode. Prior messages are context only, not legal authority.
+- Added a pre-generation provision coverage gate: when a question explicitly names a statute and paragraph, the exact requested provision must appear among retrieved sources or the system responds that the source is missing.
+- Updated source cards to show statute code, filename, page availability, and chunk ID.
+
+- PDF extraction now preserves page markers, and the legal parser carries page numbers into chunks and citations when the PDF extractor exposes them. Text/DOCX inputs without page structure continue to report page as unavailable rather than inventing one.
+- Added a safe re-index write sequence: compute replacement embeddings first, upsert current chunks, then delete only stale tail chunks.
+- Exact provision retrieval can fall back to keyword/exact database matches if the embedding provider is unavailable; a provider failure is surfaced if no other retrieval path returns evidence.

@@ -13,7 +13,10 @@ A tenant-aware multilingual legal knowledge assistant built with Next.js, Supaba
 - Resumable batch ingestion endpoint protected by `INGESTION_SECRET`.
 - Embedding adapters for Ollama BGE-M3 and configurable custom endpoint.
 - Cloudflare Workers AI and Ollama text-generation adapters.
-- Hybrid vector + PostgreSQL full-text retrieval with citation mapping.
+- Statute-aware hybrid vector + PostgreSQL full-text + exact paragraph retrieval, reciprocal-rank fusion, and deterministic reranking.
+- Legal-code metadata, same-statute cross-reference expansion, page-aware PDF extraction, and strict requested-provision coverage checks.
+- Conversation context and optional structured case-analysis mode.
+- Staff RAG evaluation dashboard and stored regression runs; bulk re-indexing from extracted text.
 - Persisted conversations/messages and source references.
 - Synthetic fixtures explicitly labelled as test-only.
 
@@ -23,7 +26,7 @@ Node.js 20+, npm, a Supabase project with PostgreSQL and `vector` extension. For
 ## Quick start
 1. `npm install`
 2. Copy `.env.example` to `.env.local` and fill in Supabase values.
-3. Run the SQL migration in `supabase/migrations/0001_initial.sql` in Supabase SQL Editor.
+3. Run all SQL migrations in `supabase/migrations/` in numeric order (`0001`, `0002`, then `0003`) in Supabase SQL Editor.
 4. In Supabase Auth, enable email/password sign-in and configure redirect URLs (`http://localhost:3000/auth/callback` and your deployed URL).
 5. `npm run dev`
 6. Visit `/register`, create the first account, then assign its role and lawyer tenant in Supabase (see `docs/SETUP.md`).
@@ -59,3 +62,9 @@ See `docs/DEPLOYMENT.md`. Use Supabase Storage for durable source files in produ
 
 ## Google Drive OAuth
 See [Google OAuth setup](docs/GOOGLE_OAUTH_SETUP.md) for configuring personal Gmail access without service-account keys.
+
+
+## Legal-aware RAG upgrade
+Apply `supabase/migrations/0003_legal_aware_retrieval.sql` after the existing migrations. Then open **Documents** and use **Re-index knowledge base** to rebuild chunks from stored extracted text. This is important for existing BGB/GewO files: the migration backfills statute codes from filenames, while re-indexing applies the updated legal-aware chunk parser and embeddings. Staff can then open **RAG evaluation** and run the BGB/GewO provision regression suite.
+
+Queries that explicitly name a statute (for example `§ 437 BGB`) are filtered to that statute. If the requested provision itself is not present in the retrieved excerpts, LegalMind AI now reports the missing source instead of inferring the requested provision from neighboring articles. Page numbers remain unavailable for chunks when the extraction pipeline has not retained page-level offsets.
