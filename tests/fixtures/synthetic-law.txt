@@ -1,0 +1,5 @@
+SYNTHETIC TEST FIXTURE — NOT REAL LAW
+§ 1 Example provision
+Absatz 1 This is fictional text created only to test parsing and chunking.
+§ 2 Another synthetic provision
+Absatz 1 No real legal effect is intended or implied.
