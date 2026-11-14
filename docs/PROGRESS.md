@@ -57,3 +57,11 @@ Retry dependency installation when npm registry access is available. Then run `n
 - Kept strict 1024-dimensional vector validation to match `vector(1024)` in the Supabase migration; ingestion must fail rather than silently store incompatible vectors.
 - Updated setup documentation.
 - Not yet verified against the user's live Cloudflare account, Vercel deployment, or Supabase database. Dependency installation, TypeScript, lint, tests, and production build remain unverified until dependencies can be installed.
+
+
+## Cloudflare GLM response compatibility fix (2026-11-14)
+
+- Updated `src/lib/ai/providers.ts` to parse both Workers AI `{ result: { response } }` and OpenAI-compatible `{ choices: [{ message: { content } }] }` response formats, including text content arrays.
+- Disabled GLM-4.7 internal thinking for this user-facing answer path and set a bounded completion-token limit.
+- Improved provider errors to expose HTTP status, non-JSON response details, and response object keys without logging credentials or prompts.
+- This is a source-level fix based on Cloudflare's published GLM-4.7-Flash API documentation; it has not yet been verified against the user's live Cloudflare account or deployed Vercel function.
