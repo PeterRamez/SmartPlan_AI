@@ -55,3 +55,7 @@ See `docs/DEPLOYMENT.md`. Use Supabase Storage for durable source files in produ
 - Add malware scanning and OCR service before accepting arbitrary scanned documents.
 - Review legal prompt, retrieval thresholds, and corpus versioning with counsel.
 - Configure backups, monitoring, audit retention, and incident response.
+
+
+## Google Drive OAuth
+See [Google OAuth setup](docs/GOOGLE_OAUTH_SETUP.md) for configuring personal Gmail access without service-account keys.

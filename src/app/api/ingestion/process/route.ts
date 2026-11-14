@@ -16,7 +16,7 @@ export async function POST(req:Request){try{
   await supabase.from("ingestion_files").update({status:"processing",attempts:item.attempts+1}).eq("id",item.id);
   try{
    if(!item.document_id||!item.external_file_id)throw new Error("Missing document or Drive file ID");
-   const buffer=await downloadDriveFile(item.external_file_id);
+   const buffer=await downloadDriveFile(item.external_file_id,profile.lawyer_id);
    const mime=item.filename.toLowerCase().endsWith(".pdf")?"application/pdf":item.filename.toLowerCase().endsWith(".docx")?"application/vnd.openxmlformats-officedocument.wordprocessingml.document":"text/plain";
    const extracted=await extractDocument(buffer,mime,item.filename);
    if(extracted.needsOcr){await supabase.from("legal_documents").update({status:"needs_ocr",extracted_text:extracted.text,error_message:"Scanned or near-empty PDF requires OCR."}).eq("id",item.document_id);await supabase.from("ingestion_files").update({status:"needs_ocr"}).eq("id",item.id);continue;}
