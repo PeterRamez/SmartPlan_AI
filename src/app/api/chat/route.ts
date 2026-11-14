@@ -6,7 +6,20 @@ import { detectLanguage } from "@/lib/language";
 import { retrieveLegalContext } from "@/lib/rag/retrieve";
 import { answerWithSources } from "@/lib/rag/answer";
 import { rateLimit } from "@/lib/rate-limit";
-const schema=z.object({question:z.string().min(3).max(6000),conversationId:z.string().uuid().nullable().optional()});
+const schema=z.object({question:z.string().min(1).max(6000),conversationId:z.string().uuid().nullable().optional()});
+
+function casualReply(question: string, language: ReturnType<typeof detectLanguage>): string | null {
+ const q=question.trim().toLowerCase().replace(/[!?.,،؛]+$/g, "");
+ const patterns = [
+  /^(hi|hello|hey|good morning|good afternoon|good evening|how are you|how's it going|thanks|thank you|thx|مرحبا|مرحباً|اهلا|أهلا|أهلًا|هاي|ازيك|إزيك|عامل ايه|عامل إيه|شكرا|شكراً|متشكر|صباح الخير|مساء الخير|guten tag|hallo|guten morgen|wie gehts|danke|bonjour|salut|merci|hola|buenos dias|gracias)$/i,
+ ];
+ if (!patterns.some((pattern) => pattern.test(q))) return null;
+ if (language === "ar") return /شكرا|شكراً|متشكر/.test(q) ? "العفو، أنا هنا لمساعدتك. لو عندك أي سؤال قانوني اتفضل اسألني." : "أهلًا بيك! 😊 أنا LegalMind AI، مساعدك في البحث والمعلومات القانونية. اتفضل، إزاي أقدر أساعدك؟";
+ if (language === "de") return /danke/i.test(q) ? "Gern geschehen! Wenn Sie eine rechtliche Frage haben, helfe ich Ihnen gerne." : "Hallo! Ich bin LegalMind AI und unterstütze Sie bei rechtlichen Fragen. Wie kann ich Ihnen helfen?";
+ if (language === "fr") return /merci/i.test(q) ? "Avec plaisir ! Je suis là si vous avez une question juridique." : "Bonjour ! Je suis LegalMind AI, votre assistant de recherche juridique. Comment puis-je vous aider ?";
+ if (language === "es") return /gracias/i.test(q) ? "¡De nada! Estoy aquí si tienes alguna pregunta legal." : "¡Hola! Soy LegalMind AI, tu asistente de información jurídica. ¿En qué puedo ayudarte?";
+ return /thank|thx/i.test(q) ? "You're welcome! I'm here if you have a legal question." : "Hi! I'm LegalMind AI, your legal research assistant. Feel free to ask me a legal question—how can I help?";
+}
 export const runtime="nodejs";
 export async function POST(req:Request){try{
  const {supabase,user,profile}=await requireUser();if(!rateLimit(user.id,15))return NextResponse.json({error:"Rate limit exceeded. Try again shortly."},{status:429});
@@ -16,8 +29,10 @@ export async function POST(req:Request){try{
  const language=detectLanguage(body.question);
  const {error:userErr}=await supabase.from("messages").insert({lawyer_id:profile.lawyer_id,conversation_id:conversationId,role:"user",content:body.question,language});
  if(userErr)throw userErr;
- const sources=await retrieveLegalContext(supabase,profile.lawyer_id,body.question,Number(process.env.RAG_TOP_K??8));
- const result=await answerWithSources(body.question,language,sources);
+ const smallTalk = casualReply(body.question, language);
+ const result = smallTalk
+  ? { answer: smallTalk, citations: [] }
+  : await answerWithSources(body.question,language,await retrieveLegalContext(supabase,profile.lawyer_id,body.question,Number(process.env.RAG_TOP_K??8)));
  const {error:assistantErr}=await supabase.from("messages").insert({lawyer_id:profile.lawyer_id,conversation_id:conversationId,role:"assistant",content:result.answer,language,citations:result.citations});
  if(assistantErr)throw assistantErr;
  await supabase.from("conversations").update({updated_at:new Date().toISOString()}).eq("id",conversationId);
