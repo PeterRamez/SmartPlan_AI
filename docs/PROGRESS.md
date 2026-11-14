@@ -48,3 +48,12 @@ Last reviewed: 2026-11-13 (automation run 1)
 ## Next action
 
 Retry dependency installation when npm registry access is available. Then run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` in that order, fix all failures, and only then proceed to live Supabase and integration verification.
+
+
+## Cloudflare GLM + BGE-M3 integration preparation (2026-11-14)
+
+- Updated the project defaults and environment example to use Cloudflare Workers AI with `@cf/zai-org/glm-4.7-flash` for generation.
+- Added a Cloudflare embedding provider using the documented REST request shape `{ "text": [input] }` for `@cf/baai/bge-m3`.
+- Kept strict 1024-dimensional vector validation to match `vector(1024)` in the Supabase migration; ingestion must fail rather than silently store incompatible vectors.
+- Updated setup documentation.
+- Not yet verified against the user's live Cloudflare account, Vercel deployment, or Supabase database. Dependency installation, TypeScript, lint, tests, and production build remain unverified until dependencies can be installed.

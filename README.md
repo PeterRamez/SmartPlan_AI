@@ -36,7 +36,7 @@ ollama pull bge-m3
 ```
 Set `AI_PROVIDER=ollama`, `EMBEDDING_PROVIDER=ollama`, and configure model names. Ollama must be reachable by the Next.js server. On Vercel, `localhost` refers to the Vercel runtime and cannot reach your laptop; use a secured reachable inference host or Cloudflare/custom endpoint.
 
-For Cloudflare Workers AI, set `AI_PROVIDER=cloudflare`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and a model ID that is currently enabled for your account. Model catalogue and free allocations change; verify them in Cloudflare's current dashboard/docs. Embeddings remain independently configured; this project does **not** silently substitute a different embedding model. For hosted BGE-M3, configure a compatible endpoint in `CUSTOM_EMBEDDING_URL`.
+For Cloudflare Workers AI, set `AI_PROVIDER=cloudflare`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and `LLM_MODEL=@cf/zai-org/glm-4.7-flash`. For multilingual embeddings, set `EMBEDDING_PROVIDER=cloudflare` and `EMBEDDING_MODEL=@cf/baai/bge-m3`. Both calls use the Cloudflare account REST API. BGE-M3 vectors are validated as 1024 dimensions to match the included pgvector schema; do not change the model or dimensions after ingesting data without a deliberate re-embedding/database migration.
 
 ## Google Drive
 Create a Google Cloud service account, enable Drive API, download its JSON key, set the email and private key environment variables, and share the target Drive folder with the service-account email as Viewer. Set `GOOGLE_DRIVE_ROOT_FOLDER_ID`. The key never reaches the browser. The initial implementation supports PDF/DOCX/TXT files and recursive folder listing.

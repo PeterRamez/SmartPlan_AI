@@ -4,7 +4,7 @@
 Browser -> Next.js App Router -> authenticated route handlers
                                -> Supabase Auth/Postgres (RLS, pgvector)
                                -> AI provider adapter (Cloudflare/Ollama)
-                               -> embedding adapter (Ollama/custom)
+                               -> embedding adapter (Cloudflare BGE-M3/Ollama/custom)
 Google Drive -> discovery -> ingestion_jobs/files -> bounded batch processor
              -> extraction -> legal parser/chunker -> embeddings -> document_chunks
 Chat -> language detect -> query embedding + Postgres FTS -> hybrid ranking
