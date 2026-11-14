@@ -7,8 +7,10 @@ Browser -> Next.js App Router -> authenticated route handlers
                                -> embedding adapter (Cloudflare BGE-M3/Ollama/custom)
 Google Drive -> discovery -> ingestion_jobs/files -> bounded batch processor
              -> extraction -> legal parser/chunker -> embeddings -> document_chunks
-Chat -> language detect -> query embedding + Postgres FTS -> hybrid ranking
-     -> retrieved source IDs -> grounded generation -> citation allow-list validation
+Chat -> language detect -> query embedding + Postgres FTS -> reciprocal-rank fusion
+     -> exact + one-hop statutory cross-reference expansion -> retrieved source IDs
+     -> fact/issue/condition-grounded generation -> optional second-pass audit
+     -> citation allow-list validation
 ```
 
 ## Tenant model
@@ -23,3 +25,8 @@ Only retrieved chunks are passed as evidence. The model is instructed to abstain
 - In-process rate limiting is not distributed and must be replaced for multi-instance production.
 - Google Drive sync is manual/batch-triggered; schedule a protected external trigger for ongoing synchronization.
 - Lawyer review workflow, jurisdiction/version validation, and legal-source licensing remain operational requirements.
+
+
+## Legal reasoning safeguards
+
+The answer prompt requires the model to distinguish established facts, disputed allegations, missing facts, and legal conditions. It prohibits inferring intent or Arglist from the mere existence of a defect and requires disclosure when a necessary statutory provision is absent from the retrieved evidence. Citation validation checks source-marker bounds and maps valid markers back to retrieved chunk IDs; it does not establish semantic entailment or legal correctness. Lawyer review remains necessary.

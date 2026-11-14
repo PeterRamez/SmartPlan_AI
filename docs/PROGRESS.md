@@ -65,3 +65,40 @@ Retry dependency installation when npm registry access is available. Then run `n
 - Disabled GLM-4.7 internal thinking for this user-facing answer path and set a bounded completion-token limit.
 - Improved provider errors to expose HTTP status, non-JSON response details, and response object keys without logging credentials or prompts.
 - This is a source-level fix based on Cloudflare's published GLM-4.7-Flash API documentation; it has not yet been verified against the user's live Cloudflare account or deployed Vercel function.
+
+
+## Legal reasoning and retrieval improvements (2026-11-14)
+
+### Implemented in source
+
+- Reworked the legal answer system prompt to require explicit separation of established facts, disputed allegations, missing facts, and legal conditions before drafting.
+- Added explicit safeguards against inferring Arglist/intent merely from the existence of a defect, and against treating delivery and Gefahrübergang as automatically identical.
+- Required provision-by-provision legal subsumption and disclosure when referenced legal provisions are absent from the uploaded evidence.
+- Replaced mixed-score sorting in hybrid retrieval with reciprocal-rank fusion, so semantic and full-text ranks are combined without pretending their numeric scores share a scale.
+- Added exact retrieval for statutory provisions explicitly mentioned in the user's question.
+- Added one-hop retrieval of statutory provisions cited inside initially retrieved chunks (bounded to 12 distinct provision numbers) to help retrieve cross-referenced rules such as §§ 439–441 referenced by § 437.
+- Kept all exact and expanded queries scoped by `lawyer_id`.
+- Improved citation-marker parsing and added a warning when the model emits out-of-range `[SOURCE n]` markers. Only citations mapped to retrieved source IDs are returned to the UI.
+- Added unit tests for statutory reference extraction, citation bounds, and required legal-reasoning prompt constraints.
+
+### Verification status
+
+- These are source changes only. The ZIP was inspected and edited locally.
+- Project dependencies are not installed in this environment. Vitest, TypeScript, lint, and production build have not yet been executed for this revision.
+- No live Supabase retrieval, Cloudflare GLM request, Google Drive ingestion, GitHub push, or Vercel deployment was performed.
+- Exact and cross-reference retrieval depends on `document_chunks.article_number` containing normalized provision numbers (for example `434`, not `§ 434`). Verify this against the ingested database before production use.
+- Citation-ID validation confirms that source markers point to retrieved excerpts; it does not prove that a cited excerpt semantically supports the legal proposition. A true semantic/legal audit still requires separate evaluation and lawyer review.
+
+
+### Local verification for this revision
+
+- `npm install --ignore-scripts --no-audit --no-fund` did not complete before the 120-second timeout. No `node_modules/` or lockfile was created.
+- A syntax transpilation check using the globally installed TypeScript compiler completed for all six changed TypeScript source/test files.
+- `npm test` could not start (`vitest: not found`).
+- `npm run lint` could not start (`next: not found`).
+- `npm run build` could not start (`next: not found`).
+- `tsc --noEmit` was attempted but cannot provide a valid project typecheck while dependencies/types are absent; it reported missing packages/types such as `next`, `react`, `zod`, `@supabase/supabase-js`, `vitest`, and Node types. No claim of a successful typecheck is made.
+- Provision-reference extraction was manually exercised against examples with `§§ 434, 437`, `§ 444 Abs. 1`, duplicate references, letter suffixes, and Absatz numbers; the expected provision numbers were produced.
+
+
+- Added an optional second-pass legal answer audit controlled by `LEGAL_ANSWER_REVIEW=true`. It checks the draft against the same question and retrieved excerpts for unsupported factual assumptions, missing legal conditions, unsupported claims, and missing-source disclosure. It uses the same configured model, adds one additional generation request per answer, and is not an independent legal opinion or guaranteed semantic proof. It defaults to `false` to avoid extra inference usage until the user opts in.

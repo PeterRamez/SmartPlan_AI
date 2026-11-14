@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { validateCitationIds } from "../src/lib/rag/citation-validation";
+import { extractCitationNumbers, getInvalidCitationNumbers, validateCitationIds } from "../src/lib/rag/citation-validation";
 
 describe("citation validation", () => {
   it("accepts valid source markers", () => {
-    expect(validateCitationIds("The rule is described in [SOURCE 1] and [SOURCE 2].", ["a", "b"])).toBe(true);
+    const answer = "The rule is described in [SOURCE 1] and [SOURCE 2].";
+    expect(validateCitationIds(answer, ["a", "b"])).toBe(true);
+    expect(extractCitationNumbers(answer)).toEqual([1, 2]);
   });
 
   it("rejects source markers outside the retrieved source list", () => {
     expect(validateCitationIds("See [SOURCE 3].", ["a", "b"])).toBe(false);
+    expect(getInvalidCitationNumbers("See [SOURCE 3] and [SOURCE 0].", ["a", "b"])).toEqual([3, 0]);
   });
 
-  it("does not require a citation when the answer contains no source marker", () => {
+  it("allows an answer with no source marker at the parsing layer", () => {
     expect(validateCitationIds("Insufficient evidence.", ["a", "b"])).toBe(true);
   });
 });
