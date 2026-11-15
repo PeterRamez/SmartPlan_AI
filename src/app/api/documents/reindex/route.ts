@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireStaff } from "@/lib/auth";
 import { errorResponse } from "@/lib/http";
 import { chunkLegalText } from "@/lib/documents/chunk";
-import { embedText } from "@/lib/ai/embeddings";
+import { embedTexts } from "@/lib/ai/embeddings";
 import { inferLawCode } from "@/lib/rag/legal-query";
 
 const schema = z.object({ documentId: z.string().uuid() });
@@ -20,18 +20,15 @@ export async function POST(request: Request) {
 
     const lawCode = inferLawCode(document.filename, document.extracted_text);
     const chunks = chunkLegalText(document.extracted_text, 2200, document.filename);
-    const rows = [];
-    for (const chunk of chunks) {
-      const embedding = await embedText(chunk.content);
-      rows.push({
-        lawyer_id: profile.lawyer_id, document_id: document.id,
-        chunk_index: chunk.chunkIndex, content: chunk.content,
-        law_code: chunk.lawCode ?? lawCode, law_name: chunk.lawCode ?? lawCode,
-        article_number: chunk.articleNumber ?? null,
-        paragraph_number: chunk.paragraphNumber ?? null, page_number: chunk.pageNumber ?? null,
-        metadata: chunk.metadata, embedding,
-      });
-    }
+    const vectors = await embedTexts(chunks.map((chunk) => chunk.content));
+    const rows = chunks.map((chunk, index) => ({
+      lawyer_id: profile.lawyer_id, document_id: document.id,
+      chunk_index: chunk.chunkIndex, content: chunk.content,
+      law_code: chunk.lawCode ?? lawCode, law_name: chunk.lawCode ?? lawCode,
+      article_number: chunk.articleNumber ?? null,
+      paragraph_number: chunk.paragraphNumber ?? null, page_number: chunk.pageNumber ?? null,
+      metadata: chunk.metadata, embedding: vectors[index],
+    }));
     if (rows.length) {
       const { error: upsertError } = await supabase.from("document_chunks").upsert(rows, { onConflict: "document_id,chunk_index" });
       if (upsertError) throw upsertError;

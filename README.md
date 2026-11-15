@@ -75,3 +75,9 @@ Queries that explicitly name a statute (for example `§ 437 BGB`) are filtered t
 The legal chat assistant is presented to end users as **Alex**. The chat UI now uses a concise, client-friendly layout, detects Arabic message direction for right-to-left display, and provides optional follow-up prompts for deeper explanations, conditions/exceptions, and practical next steps. Supporting references are hidden behind an expandable “References used” section; raw chunk/document identifiers are not shown. Citation anchors are converted to simple numbered references that match the displayed source list.
 
 The answer-generation instructions were updated to prioritize a direct answer, conversational explanations, careful treatment of missing facts, and source-grounded legal claims. This is a presentation and prompting improvement; actual legal accuracy still depends on the quality and completeness of the indexed documents and must be tested against representative questions.
+
+## Recent document-management improvements
+
+Document upload and reindex now generate embeddings in batches (up to 32 passages per provider request) and persist passages in bulk. Bulk upload processes up to three files concurrently; the Admin reindex action processes up to three documents concurrently. Upload failures are marked as failed with an error message. Admin users can delete documents from both Documents and Knowledge Base; the existing `ON DELETE CASCADE` relationship removes the document's indexed passages and vectors from retrieval.
+
+See `docs/RELEASE_NOTES_UPLOAD_SPEED_DELETE.md` for implementation details and verification limitations. The upload route currently processes a document in the request rather than using a durable background queue, so very large or scanned files may still take time.

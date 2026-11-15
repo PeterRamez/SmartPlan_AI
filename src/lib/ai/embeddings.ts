@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { mapWithConcurrency } from "@/lib/ai/batch";
 
 interface OllamaEmbeddingResponse {
   embeddings?: unknown;
@@ -100,4 +101,58 @@ export async function embedText(text: string): Promise<number[]> {
     if (vector === undefined && Array.isArray(customData.data)) vector = customData.data[0]?.embedding;
   }
   return validateVector(vector, "Custom");
+}
+
+/** Batch embedding path: Cloudflare and Ollama can embed many chunks in one request. */
+export async function embedTexts(texts: string[]): Promise<number[][]> {
+  if (!texts.length) return [];
+
+  if (env.EMBEDDING_PROVIDER === "cloudflare") {
+    if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_API_TOKEN) {
+      throw new Error("Cloudflare AI credentials missing for embeddings");
+    }
+    const url = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/run/${env.EMBEDDING_MODEL}`;
+    const batches = await mapWithConcurrency(
+      Array.from({ length: Math.ceil(texts.length / 32) }, (_, index) => texts.slice(index * 32, (index + 1) * 32)),
+      3,
+      async (batch) => {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, "content-type": "application/json" },
+          body: JSON.stringify({ text: batch }),
+        });
+        if (!response.ok) throw new Error(`Cloudflare embeddings failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
+        const payload: unknown = await response.json();
+        if (!isRecord(payload) || !isRecord(payload.result) || !Array.isArray(payload.result.data)) {
+          throw new Error("Cloudflare batch embeddings returned an unexpected response");
+        }
+        const vectors = payload.result.data.map((item) => validateVector(item, "Cloudflare BGE-M3"));
+        if (vectors.length !== batch.length) throw new Error(`Cloudflare returned ${vectors.length} vectors for ${batch.length} chunks`);
+        return vectors;
+      },
+    );
+    return batches.flat();
+  }
+
+  if (env.EMBEDDING_PROVIDER === "ollama") {
+    const batches = await mapWithConcurrency(
+      Array.from({ length: Math.ceil(texts.length / 32) }, (_, index) => texts.slice(index * 32, (index + 1) * 32)),
+      3,
+      async (batch) => {
+        const response = await fetch(`${env.OLLAMA_BASE_URL}/api/embed`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ model: env.OLLAMA_EMBEDDING_MODEL, input: batch }),
+        });
+        if (!response.ok) throw new Error(`Ollama batch embedding failed: ${response.status}`);
+        const payload: unknown = await response.json();
+        const vectors = isRecord(payload) && Array.isArray(payload.embeddings) ? payload.embeddings : [];
+        if (vectors.length !== batch.length) throw new Error(`Ollama returned ${vectors.length} vectors for ${batch.length} chunks`);
+        return vectors.map((vector) => validateVector(vector, "Ollama"));
+      },
+    );
+    return batches.flat();
+  }
+
+  // Custom endpoints may only support one input per request; keep requests bounded.
+  return mapWithConcurrency(texts, 4, (text) => embedText(text));
 }

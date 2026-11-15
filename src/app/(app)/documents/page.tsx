@@ -1,6 +1,7 @@
 import { requireStaff } from "@/lib/auth";
 import BulkUpload from "@/components/bulk-upload";
 import { ReindexDocuments } from "@/components/reindex-documents";
+import { DocumentDeleteButton } from "@/components/document-actions";
 
 export default async function Documents() {
   const { supabase } = await requireStaff();
@@ -31,7 +32,7 @@ export default async function Documents() {
                   <div className="mt-1 text-xs text-slate-500">{d.filename} · {d.source_type}</div>
                   {d.error_message && <div className="mt-1 text-xs text-red-600">{d.error_message}</div>}
                 </div>
-                <span className={`rounded-full px-3 py-1 text-xs ${d.status === "processed" ? "bg-green-50 text-green-700" : d.status === "failed" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{d.status}</span>
+                <div className="flex items-center gap-3"><span className={`rounded-full px-3 py-1 text-xs ${d.status === "processed" ? "bg-green-50 text-green-700" : d.status === "failed" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{d.status}</span><DocumentDeleteButton documentId={d.id} title={d.title} /></div>
               </div>
             ))}
           </div>

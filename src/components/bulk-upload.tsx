@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { FileUp, Loader2, CheckCircle2, XCircle, FileWarning } from "lucide-react";
 
 type UploadStatus = "queued" | "uploading" | "processed" | "needs_ocr" | "failed" | "skipped";
@@ -29,6 +30,7 @@ async function readApiResponse(response: Response): Promise<Record<string, unkno
 }
 
 export default function BulkUpload() {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -61,34 +63,43 @@ export default function BulkUpload() {
     }
 
     setBusy(true);
-    for (const { file, index } of supported) {
-      setItems((current) => current.map((item, itemIndex) => itemIndex === index
-        ? { ...item, status: "uploading", message: "Uploading and indexing…" }
-        : item));
-      try {
-        const body = new FormData();
-        body.append("file", file);
-        const response = await fetch("/api/documents/upload", { method: "POST", body });
-        const result = await readApiResponse(response);
-        if (!response.ok) {
-          throw new Error(typeof result.error === "string" ? result.error : `Upload failed (HTTP ${response.status})`);
-        }
-        const needsOcr = result.status === "needs_ocr";
-        setItems((current) => current.map((item, itemIndex) => itemIndex === index ? {
-          ...item,
-          status: needsOcr ? "needs_ocr" : "processed",
-          message: needsOcr
-            ? "Uploaded; this file needs OCR before it can be searched."
-            : `Indexed ${typeof result.chunks === "number" ? result.chunks : 0} searchable sections.`
-        } : item));
-      } catch (error) {
+    let cursor = 0;
+    const worker = async () => {
+      while (true) {
+        const next = cursor++;
+        if (next >= supported.length) return;
+        const { file, index } = supported[next];
         setItems((current) => current.map((item, itemIndex) => itemIndex === index
-          ? { ...item, status: "failed", message: error instanceof Error ? error.message : "Upload failed" }
+          ? { ...item, status: "uploading", message: "Uploading and indexing…" }
           : item));
+        try {
+          const body = new FormData();
+          body.append("file", file);
+          const response = await fetch("/api/documents/upload", { method: "POST", body });
+          const result = await readApiResponse(response);
+          if (!response.ok) {
+            throw new Error(typeof result.error === "string" ? result.error : `Upload failed (HTTP ${response.status})`);
+          }
+          const needsOcr = result.status === "needs_ocr";
+          setItems((current) => current.map((item, itemIndex) => itemIndex === index ? {
+            ...item,
+            status: needsOcr ? "needs_ocr" : "processed",
+            message: needsOcr
+              ? "Uploaded; this file needs OCR before it can be searched."
+              : `Indexed ${typeof result.chunks === "number" ? result.chunks : 0} searchable sections.`,
+          } : item));
+        } catch (error) {
+          setItems((current) => current.map((item, itemIndex) => itemIndex === index
+            ? { ...item, status: "failed", message: error instanceof Error ? error.message : "Upload failed" }
+            : item));
+        }
       }
-    }
+    };
+    // A few files are uploaded simultaneously; the server also embeds chunks concurrently.
+    await Promise.all(Array.from({ length: Math.min(3, supported.length) }, worker));
     setBusy(false);
     if (inputRef.current) inputRef.current.value = "";
+    router.refresh();
   }
 
   const completed = items.filter((item) => item.status === "processed").length;
@@ -100,7 +111,7 @@ export default function BulkUpload() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold">Add legal documents</h2>
-          <p className="mt-1 text-sm text-slate-500">Choose an entire folder or select multiple PDF, DOCX, or TXT files. Supported files are uploaded and indexed one by one; other file types are skipped.</p>
+          <p className="mt-1 text-sm text-slate-500">Choose an entire folder or select multiple PDF, DOCX, or TXT files. Supported files are uploaded in parallel batches and indexed as they arrive; other file types are skipped.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => openPicker(true)}>Choose entire folder</button>
@@ -131,7 +142,7 @@ export default function BulkUpload() {
           <span className="shrink-0 text-xs capitalize text-slate-500">{item.status.replace("_", " ")}</span>
         </div>)}
       </div>}
-      <p className="mt-4 text-xs text-slate-400">Current limit: 20 MB per file. Supported formats: PDF, DOCX, TXT. SVG and other non-document files are skipped. Keep this page open until processing finishes.</p>
+      <p className="mt-4 text-xs text-slate-400">Current limit: 20 MB per file. Supported formats: PDF, DOCX, TXT. Up to 3 files are uploaded at once; each file generates embeddings in parallel batches. Keep this page open until processing finishes.</p>
     </section>
   );
 }
