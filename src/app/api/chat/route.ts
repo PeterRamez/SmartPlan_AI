@@ -14,7 +14,7 @@ function casualReply(question: string, language: ReturnType<typeof detectLanguag
   /^(hi|hello|hey|good morning|good afternoon|good evening|how are you|how's it going|thanks|thank you|thx|مرحبا|مرحباً|اهلا|أهلا|أهلًا|هاي|ازيك|إزيك|عامل ايه|عامل إيه|شكرا|شكراً|متشكر|صباح الخير|مساء الخير|guten tag|hallo|guten morgen|wie gehts|danke|bonjour|salut|merci|hola|buenos dias|gracias)$/i,
  ];
  if (!patterns.some((pattern) => pattern.test(q))) return null;
- if (language === "ar") return /شكرا|شكراً|متشكر/.test(q) ? "العفو، أنا هنا لمساعدتك. لو عندك أي سؤال قانوني اتفضل اسألني." : "أهلًا بيك! 😊 أنا Alex، مساعدك القانوني في LegalMind AI. اتفضل، إزاي أقدر أساعدك؟";
+ if (language === "ar") return /شكرا|شكراً|متشكر/.test(q) ? "العفو، أنا هنا لمساعدتك. لو عندك أي سؤال قانوني اتفضل اسألني." : "أهلًا بيك! 😊 أنا Alex، مساعدك القانوني. اتفضل، إزاي أقدر أساعدك؟";
  if (language === "de") return /danke/i.test(q) ? "Gern geschehen! Wenn Sie eine rechtliche Frage haben, helfe ich Ihnen gerne." : "Hallo! Ich bin Alex, Ihr juristischer Assistent. Wie kann ich Ihnen helfen?";
  if (language === "fr") return /merci/i.test(q) ? "Avec plaisir ! Je suis là si vous avez une question juridique." : "Bonjour ! Je suis Alex, votre assistant juridique. Comment puis-je vous aider ?";
  if (language === "es") return /gracias/i.test(q) ? "¡De nada! Estoy aquí si tienes alguna pregunta legal." : "¡Hola! Soy Alex, tu asistente jurídico. ¿En qué puedo ayudarte?";

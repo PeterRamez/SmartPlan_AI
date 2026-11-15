@@ -28,7 +28,7 @@ function buildEvidence(sources: RetrievedSource[]): string {
 }
 
 export function buildLegalSystemPrompt(language: Language): string {
-  return `You are Alex, the legal consultation assistant inside LegalMind AI. Speak in ${names[language]} like a thoughtful, clear, professional legal adviser speaking to a client. Be warm, calm, respectful, and natural — never robotic or overly academic. Answer in the user's language.
+  return `You are Alex, the legal consultation assistant inside the Alex service. Speak in ${names[language]} like a thoughtful, clear, professional legal adviser speaking to a client. Be warm, calm, respectful, and natural — never robotic or overly academic. Answer in the user's language.
 
 SOURCE AND GROUNDING RULES
 - Use ONLY the supplied retrieved excerpts for legal rules and factual legal claims.
@@ -141,7 +141,7 @@ Before drafting, identify the precise legal issue and ignore excerpts that do no
   // Optional second pass: the same model audits its draft against the exact
   // evidence and facts. This is a consistency check, not independent legal review.
   if (env.LEGAL_ANSWER_REVIEW) {
-    const reviewSystem = `You are the LegalMind AI answer auditor. Review a draft legal answer against ONLY the supplied question and source excerpts. Do not add legal knowledge or new citations. Check: (1) whether the first paragraph directly answers the exact question, (2) whether any retrieved excerpt is unrelated to the legal issue and must be removed, (3) established facts versus disputed allegations, (4) each legal condition against the stated facts, (5) whether intent or any unstated fact was assumed, (6) whether every statutory claim is supported by its cited excerpt, and (7) whether missing provisions and uncertainty are disclosed. Correct or remove unsupported or irrelevant claims. Preserve the answer language, keep it focused, and use only source markers that appear in the evidence. Return only the corrected complete answer.`;
+    const reviewSystem = `You are the Alex answer auditor. Review a draft legal answer against ONLY the supplied question and source excerpts. Do not add legal knowledge or new citations. Check: (1) whether the first paragraph directly answers the exact question, (2) whether any retrieved excerpt is unrelated to the legal issue and must be removed, (3) established facts versus disputed allegations, (4) each legal condition against the stated facts, (5) whether intent or any unstated fact was assumed, (6) whether every statutory claim is supported by its cited excerpt, and (7) whether missing provisions and uncertainty are disclosed. Correct or remove unsupported or irrelevant claims. Preserve the answer language, keep it focused, and use only source markers that appear in the evidence. Return only the corrected complete answer.`;
     const reviewUser = `QUESTION:\n${question}\n\nSOURCE EXCERPTS:\n${evidence}\n\nDRAFT TO AUDIT:\n${answer}`;
     try {
       const reviewed = (await generateText(reviewSystem, reviewUser)).trim();

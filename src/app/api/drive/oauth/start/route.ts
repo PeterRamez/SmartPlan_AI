@@ -17,7 +17,7 @@ export async function GET() {
       include_granted_scopes: true
     });
     const jar = await cookies();
-    jar.set("legalmind_google_oauth_state", state, {
+    jar.set("alex_google_oauth_state", state, {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax",
       path: "/api/drive/oauth", maxAge: 10 * 60
     });

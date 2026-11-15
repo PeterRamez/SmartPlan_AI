@@ -58,7 +58,7 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
   return (
     <main className="flex min-h-screen items-center justify-center px-5">
       <div className="card w-full max-w-md p-8">
-        <Link href="/" className="text-sm text-blue-700">← LegalMind AI</Link>
+        <Link href="/" className="text-sm text-blue-700">← Alex</Link>
         <h1 className="mt-6 text-2xl font-semibold">
           {mode === "login" ? "Welcome back" : "Create your account"}
         </h1>

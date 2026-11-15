@@ -1,4 +1,4 @@
-# LegalMind AI
+# Alex
 
 A tenant-aware multilingual legal knowledge assistant built with Next.js, Supabase/Postgres + pgvector, Google Drive ingestion, and pluggable AI providers.
 
@@ -68,7 +68,7 @@ See [Google OAuth setup](docs/GOOGLE_OAUTH_SETUP.md) for configuring personal Gm
 ## Legal-aware RAG upgrade
 Apply `supabase/migrations/0003_legal_aware_retrieval.sql` after the existing migrations. Then open **Documents** and use **Re-index knowledge base** to rebuild chunks from stored extracted text. This is important for existing BGB/GewO files: the migration backfills statute codes from filenames, while re-indexing applies the updated legal-aware chunk parser and embeddings. Staff can then open **RAG evaluation** and run the BGB/GewO provision regression suite.
 
-Queries that explicitly name a statute (for example `§ 437 BGB`) are filtered to that statute. If the requested provision itself is not present in the retrieved excerpts, LegalMind AI now reports the missing source instead of inferring the requested provision from neighboring articles. Page numbers remain unavailable for chunks when the extraction pipeline has not retained page-level offsets.
+Queries that explicitly name a statute (for example `§ 437 BGB`) are filtered to that statute. If the requested provision itself is not present in the retrieved excerpts, Alex now reports the missing source instead of inferring the requested provision from neighboring articles. Page numbers remain unavailable for chunks when the extraction pipeline has not retained page-level offsets.
 
 ## Alex consultation experience
 

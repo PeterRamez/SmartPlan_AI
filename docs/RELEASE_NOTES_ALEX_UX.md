@@ -1,7 +1,7 @@
 # Alex consultation UX update
 
 ## Included
-- Rebranded the chat assistant persona from LegalMind AI to Alex while retaining LegalMind AI as the product name.
+- Rebranded the chat assistant persona from Alex to Alex while retaining Alex as the product name.
 - Reworked the chat screen into a compact consultation interface with a welcome state, sample prompts, clear message bubbles, and a simplified composer.
 - Arabic messages render right-to-left; other languages use automatic direction.
 - Updated answer instructions to lead with a direct, human-readable response and explain legal reasoning in plain language.

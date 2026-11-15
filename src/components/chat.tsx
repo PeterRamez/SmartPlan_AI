@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { ArrowUp, BookOpen, ChevronDown, ChevronUp, MessageSquarePlus, Sparkles, Scale } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { ArrowUp, BookOpen, ChevronDown, ChevronUp, MessageSquarePlus, Sparkles, Scale, Clock3, Wallet, ShieldCheck } from "lucide-react";
 import type { RetrievedSource } from "@/lib/rag/retrieve";
 
 type Msg = {
@@ -38,12 +38,51 @@ export default function Chat() {
   const [error, setError] = useState("");
   const [analysisMode, setAnalysisMode] = useState(false);
   const [openSources, setOpenSources] = useState<number[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState<"free" | "starter" | "standard" | "deep">("free");
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState(5 * 60);
+
+  const plans = {
+    free: { label: "Free trial", minutes: 5, price: "€0.00" },
+    starter: { label: "Quick consultation", minutes: 10, price: "€2.99" },
+    standard: { label: "Standard consultation", minutes: 20, price: "€4.99" },
+    deep: { label: "Extended consultation", minutes: 30, price: "€6.99" },
+  } as const;
+  const activePlan = plans[selectedPlan];
+
+  useEffect(() => {
+    if (!sessionStarted) return;
+    const timer = window.setInterval(() => {
+      setRemainingSeconds((current) => {
+        return current <= 1 ? 0 : current - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [sessionStarted]);
+
+  useEffect(() => {
+    if (sessionStarted && remainingSeconds === 0) {
+      setSessionStarted(false);
+      setSessionExpired(true);
+    }
+  }, [remainingSeconds, sessionStarted]);
+
+  function startSession() {
+    setRemainingSeconds(activePlan.minutes * 60);
+    setSessionExpired(false);
+    setSessionStarted(true);
+  }
+
+  function formatTime(seconds: number) {
+    return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
+  }
 
 
   async function send(e?: FormEvent, suppliedQuestion?: string) {
     e?.preventDefault();
     const question = (suppliedQuestion ?? input).trim();
-    if (!question || busy) return;
+    if (!question || busy || !sessionStarted) return;
     setInput("");
     setMessages((current) => [...current, { role: "user", content: question }]);
     setBusy(true);
@@ -72,13 +111,42 @@ export default function Chat() {
   }
 
   return (
-    <section className="alex-panel">
+    <section className="alex-panel relative">
+      {!sessionStarted && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center overflow-y-auto rounded-[18px] bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="my-auto w-full max-w-2xl rounded-3xl border border-white/60 bg-white p-6 shadow-2xl sm:p-8" dir="auto">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-xl font-black text-white shadow-lg">A<span className="text-cyan-300">.</span></div>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-700">Welcome to Alex</p><h2 className="mt-1 text-xl font-bold text-slate-950">{sessionExpired ? "انتهى وقت جلستك" : "ابدأ استشارتك مع Alex"}</h2></div>
+            </div>
+            <p className="mt-4 text-sm leading-7 text-slate-600">اختار المدة المناسبة. أول 5 دقائق مجانية للتجربة، وبعدها تقدر تختار باقة مدفوعة حسب احتياجك.</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {([
+                ["free", "تجربة مجانية", "5 دقائق", "€0.00", "جرّب Alex واسأل سؤالك الأول"],
+                ["starter", "استشارة سريعة", "10 دقائق", "€2.99", "لسؤال محدد وفهم الخيارات الأولية"],
+                ["standard", "استشارة متوسطة", "20 دقيقة", "€4.99", "للتفاصيل وأسئلة المتابعة"],
+                ["deep", "استشارة موسعة", "30 دقيقة", "€6.99", "لمناقشة موضوعك بمزيد من التفصيل"],
+              ] as const).map(([key, title, duration, price, description]) => (
+                <button key={key} type="button" onClick={() => setSelectedPlan(key)} className={`rounded-2xl border p-4 text-left transition ${selectedPlan === key ? "border-blue-700 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+                  <div className="flex items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-800">{title}</span>{selectedPlan === key && <span className="rounded-full bg-blue-700 px-2 py-1 text-[10px] font-semibold text-white">Selected</span>}</div>
+                  <div className="mt-3 flex items-baseline gap-1"><span className="text-2xl font-bold text-slate-950">{price}</span></div>
+                  <div className="mt-2 flex items-center gap-2 text-sm text-slate-600"><Clock3 size={15}/>{duration}</div>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
+                </button>
+              ))}
+            </div>
+            <div className="mt-5 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900"><Wallet size={16} className="mt-0.5 shrink-0"/><span>أسعار تجريبية للـ MVP باليورو. الدفع الإلكتروني غير مفعّل حاليًا، ولن يتم خصم أي مبلغ. المؤقت يوضح مدة التجربة داخل الواجهة فقط.</span></div>
+            <button type="button" onClick={startSession} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-blue-900"><ShieldCheck size={17}/> {selectedPlan === "free" ? "ابدأ التجربة المجانية" : "ابدأ مع Alex"} · {activePlan.minutes} دقائق</button>
+            <p className="mt-3 text-center text-[11px] leading-5 text-slate-400">معلومات Alex للتوعية ولا تُعد بديلاً عن استشارة محامٍ مرخّص.</p>
+          </div>
+        </div>
+      )}
       <header className="alex-header">
         <div className="flex min-w-0 items-center gap-3">
           <div className="alex-avatar"><Scale size={20} /></div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2"><h2 className="font-semibold text-slate-900">Alex</h2><span className="alex-status">AI legal assistant</span></div>
-            <p className="text-xs text-slate-500">LegalMind consultation</p>
+            <div className="flex items-center gap-2"><h2 className="font-semibold text-slate-900">Alex</h2><span className="alex-status">AI legal assistant</span>{sessionStarted && <span className="rounded-full bg-cyan-50 px-2 py-1 text-[11px] font-semibold tabular-nums text-cyan-800">{formatTime(remainingSeconds)}</span>}</div>
+            <p className="text-xs text-slate-500">{sessionStarted ? `${activePlan.label} · ${formatTime(remainingSeconds)} remaining` : "Your private consultation"}</p>
           </div>
         </div>
         <button type="button" className="alex-new-chat" onClick={newChat}><MessageSquarePlus size={15} /><span>New chat</span></button>

@@ -20,7 +20,7 @@ begin
   limit 1;
 
   if assigned_lawyer_id is null then
-    raise exception 'LEGALMIND_WORKSPACE_NOT_CONFIGURED: create/configure the admin profile and lawyer workspace before allowing registrations';
+    raise exception 'ALEX_WORKSPACE_NOT_CONFIGURED: create/configure the admin profile and lawyer workspace before allowing registrations';
   end if;
 
   insert into public.profiles (

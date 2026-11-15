@@ -1,5 +1,5 @@
 {
-  "name": "LegalMind multilingual German-law retrieval starter set",
+  "name": "Alex multilingual German-law retrieval starter set",
   "version": 1,
   "status": "starter_only_requires_counsel_review_and_gold_chunk_ids",
   "warning": "These are retrieval test prompts and statute targets, not legal advice or authoritative answer keys. Confirm current law, applicable versions, and expected provisions with qualified German counsel before scoring.",

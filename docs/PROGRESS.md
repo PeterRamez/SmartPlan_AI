@@ -1,10 +1,10 @@
-# LegalMind AI — Verification Progress
+# Alex — Verification Progress
 
 Last reviewed: 2026-11-13 (automation run 1)
 
 ## Current verification run
 
-- Opened and extracted the supplied `/mnt/data/LegalMind-AI.zip`; confirmed it contains the `legalmind-ai/` project tree. No assumption was made about any earlier archive path.
+- Opened and extracted the supplied `/mnt/data/Alex.zip`; confirmed it contains the `alex/` project tree. No assumption was made about any earlier archive path.
 - Reviewed the package scripts/dependencies, TypeScript configuration, Supabase migration, environment validation, Google Drive adapter, ingestion routes, document extraction, retrieval, answer generation, and citation validation.
 - Retried `npm install --no-audit --no-fund` (including a bounded retry configuration). Installation could not complete because requests to `https://registry.npmjs.org` failed with DNS `EAI_AGAIN`. No `node_modules/` or `package-lock.json` was produced.
 - Ran the globally available TypeScript compiler (`tsc` 5.8.3) as a diagnostic only. It exited non-zero because project dependencies and type declarations are absent (`next`, `react`, `zod`, `vitest`, Node types, etc.). This is not a valid project typecheck and does not establish whether source-level type errors remain.

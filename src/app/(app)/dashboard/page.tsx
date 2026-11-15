@@ -12,7 +12,7 @@ export default async function Dashboard() {
 
     return (
       <div className="mx-auto max-w-4xl">
-        <p className="text-sm font-medium text-blue-700">LEGALMIND AI · CLIENT AREA</p>
+        <p className="text-sm font-medium text-blue-700">ALEX · CLIENT AREA</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
           Welcome{profile.full_name ? `, ${profile.full_name}` : ""}
         </h1>

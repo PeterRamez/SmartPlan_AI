@@ -1,9 +1,10 @@
 import Link from "next/link";
 import {
-  Scale, LayoutDashboard, MessageSquare, Files, BookOpen, Settings,
+  LayoutDashboard, MessageSquare, Files, BookOpen, Settings,
   LogOut, Activity
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import BrandMark from "@/components/brand-mark";
 
 const staffNav = [
   ["Dashboard", "/dashboard", LayoutDashboard],
@@ -32,10 +33,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
   return (
     <div className="min-h-screen md:flex">
       <aside className="w-full border-b border-slate-200 bg-white p-5 md:min-h-screen md:w-64 md:border-b-0 md:border-r">
-        <Link href="/" className="flex items-center gap-2 text-lg font-bold">
-          <span className="rounded-lg bg-blue-900 p-2 text-white"><Scale size={17} /></span>
-          LegalMind AI
-        </Link>
+        <Link href="/" className="inline-flex"><BrandMark /></Link>
         <div className="mt-6 rounded-xl bg-slate-50 px-3 py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             {isStaff ? "Lawyer workspace" : "Client workspace"}

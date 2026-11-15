@@ -9,7 +9,7 @@ export default async function Knowledge() {
   const { data: documents } = await supabase.from("legal_documents").select("id,title,filename,status").order("created_at", { ascending: false }).limit(100);
   return <div className="mx-auto max-w-6xl">
     <h1 className="text-3xl font-semibold">Knowledge base</h1>
-    <p className="mt-2 text-sm text-slate-500">Upload your legal files in one go. LegalMind AI will index them for grounded answers.</p>
+    <p className="mt-2 text-sm text-slate-500">Upload your legal files in one go. Alex will index them for grounded answers.</p>
     <BulkUpload />
     <div className="mb-5"><ReindexDocuments documents={(documents ?? []).filter((doc) => doc.status === "processed").map((doc) => ({ id: doc.id, title: doc.title }))} /></div>
     <section className="card mb-7 overflow-hidden"><div className="border-b p-4 font-semibold">Knowledge documents</div>{documents?.length ? <div className="divide-y">{documents.map((doc) => <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 p-4"><div className="min-w-0"><div className="break-words text-sm font-medium">{doc.title}</div><div className="mt-1 text-xs text-slate-500">{doc.filename} · {doc.status}</div></div><DocumentDeleteButton documentId={doc.id} title={doc.title} /></div>)}</div> : <p className="p-6 text-sm text-slate-500">No documents uploaded yet.</p>}</section>

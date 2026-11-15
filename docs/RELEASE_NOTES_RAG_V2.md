@@ -1,4 +1,4 @@
-# LegalMind AI — Advanced Legal RAG V2
+# Alex — Advanced Legal RAG V2
 
 ## Included in this build
 - Expanded German legal vocabulary for cross-language employment, sale/defect, theft, fraud, rental, family, and inheritance questions.
