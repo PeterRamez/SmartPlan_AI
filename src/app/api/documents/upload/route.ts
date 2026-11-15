@@ -12,9 +12,11 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   let staffContext: Awaited<ReturnType<typeof requireStaff>> | null = null;
   let createdDocumentId: string | null = null;
+  let phase = "authentication";
   try {
     staffContext = await requireStaff();
     const { supabase, profile } = staffContext;
+    phase = "reading-upload";
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) return NextResponse.json({ error: "File is required" }, { status: 400 });
@@ -28,6 +30,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Unsupported file type: ${extension ?? file.type}. Only PDF, DOCX and TXT are supported.` }, { status: 415 });
     }
 
+    phase = "creating-document-record";
     const buffer = Buffer.from(await file.arrayBuffer());
     const checksum = createHash("sha256").update(buffer).digest("hex");
     const { data: document, error: insertError } = await supabase.from("legal_documents").insert({
@@ -37,6 +40,7 @@ export async function POST(req: Request) {
     if (insertError) throw insertError;
     createdDocumentId = document.id;
 
+    phase = "extracting-document-text";
     const extracted = await extractDocument(buffer, file.type, file.name);
     if (extracted.needsOcr) {
       const { error } = await supabase.from("legal_documents").update({ status: "needs_ocr", extracted_text: extracted.text, error_message: "OCR required" })
@@ -45,9 +49,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ documentId: document.id, status: "needs_ocr" });
     }
 
+    phase = "chunking-document";
     const lawCode = inferLawCode(file.name, extracted.text);
     const chunks = chunkLegalText(extracted.text, 2200, file.name);
     // BGE-M3 receives chunks in batches (up to 32 texts per request), instead of one network call per chunk.
+    phase = "generating-embeddings";
     const vectors = await embedTexts(chunks.map((chunk) => chunk.content));
     const rows = chunks.map((chunk, index) => ({
       lawyer_id: profile.lawyer_id, document_id: document.id, chunk_index: chunk.chunkIndex,
@@ -56,10 +62,12 @@ export async function POST(req: Request) {
       law_code: chunk.lawCode ?? lawCode, law_name: chunk.lawCode ?? lawCode,
       metadata: chunk.metadata, embedding: vectors[index],
     }));
+    phase = "saving-document-chunks";
     if (rows.length) {
       const { error } = await supabase.from("document_chunks").insert(rows);
       if (error) throw error;
     }
+    phase = "finalizing-document";
     const { error: updateError } = await supabase.from("legal_documents").update({
       status: "processed", extracted_text: extracted.text, law_code: lawCode,
       metadata: { pages: extracted.pages, chunkCount: chunks.length, lawCode }, error_message: null,
@@ -67,11 +75,38 @@ export async function POST(req: Request) {
     if (updateError) throw updateError;
     return NextResponse.json({ documentId: document.id, status: "processed", chunks: chunks.length });
   } catch (error) {
+    // Supabase/PostgREST errors are plain objects, not necessarily Error instances.
+    // Preserve their message/code so production failures are diagnosable.
+    const value = typeof error === "object" && error !== null
+      ? error as Record<string, unknown>
+      : null;
+    const message = error instanceof Error
+      ? error.message
+      : typeof value?.message === "string"
+        ? value.message
+        : typeof error === "string" ? error : "Unexpected error";
+    const code = typeof value?.code === "string" ? value.code : undefined;
+    const details = typeof value?.details === "string" ? value.details : undefined;
+    const hint = typeof value?.hint === "string" ? value.hint : undefined;
+    const requestId = req.headers.get("x-vercel-id") ?? undefined;
+
+    console.error("[documents/upload] failed", {
+      phase, requestId, documentId: createdDocumentId ?? undefined,
+      message, code, details, hint,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
     if (staffContext && createdDocumentId) {
-      const message = error instanceof Error ? error.message.slice(0, 1000) : "Document processing failed";
-      await staffContext.supabase.from("legal_documents").update({ status: "failed", error_message: message })
-        .eq("id", createdDocumentId).eq("lawyer_id", staffContext.profile.lawyer_id);
+      try {
+        await staffContext.supabase.from("legal_documents").update({
+          status: "failed", error_message: message.slice(0, 1000),
+        }).eq("id", createdDocumentId).eq("lawyer_id", staffContext.profile.lawyer_id);
+      } catch (statusError) {
+        console.error("[documents/upload] failed to mark document as failed", statusError);
+      }
     }
-    return errorResponse(error);
+
+    const publicMessage = [message, code ? `Code: ${code}` : ""].filter(Boolean).join(" · ");
+    return NextResponse.json({ error: publicMessage, phase }, { status: 500 });
   }
 }
