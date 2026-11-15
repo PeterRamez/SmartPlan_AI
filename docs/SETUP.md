@@ -18,6 +18,7 @@ update public.profiles
 set role = 'admin', lawyer_id = 'REPLACE_WITH_LAWYER_UUID'
 where id = 'AUTH_USER_UUID';
 ```
+After this first admin profile has a valid `lawyer_id`, run `supabase/migrations/0006_client_registration_profiles.sql`. This installs automatic client-profile provisioning and backfills Auth users who were already registered without a profile. Do not apply migration `0006` before the initial admin workspace is configured.
 Never allow a client to submit their own `lawyer_id`. Server-side code resolves it from the authenticated profile.
 
 ## Google service account

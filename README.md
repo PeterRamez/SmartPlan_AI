@@ -27,10 +27,10 @@ Node.js 20+, npm, a Supabase project with PostgreSQL and `vector` extension. For
 ## Quick start
 1. `npm install`
 2. Copy `.env.example` to `.env.local` and fill in Supabase values.
-3. Run all SQL migrations in `supabase/migrations/` in numeric order (`0001` through `0005`) in Supabase SQL Editor.
+3. Run migrations `0001` through `0005` in numeric order in Supabase SQL Editor. Create and configure the initial admin account and lawyer tenant as described in `docs/SETUP.md`, then run migration `0006_client_registration_profiles.sql`. Migration `0006` automatically creates a `client` profile for each new signup and backfills existing Auth users who do not yet have a profile.
 4. In Supabase Auth, enable email/password sign-in and configure redirect URLs (`http://localhost:3000/auth/callback` and your deployed URL).
 5. `npm run dev`
-6. Visit `/register`, create the first account, then assign its role and lawyer tenant in Supabase (see `docs/SETUP.md`).
+6. After the initial admin and lawyer tenant are configured and migration `0006` is applied, new public registrations are automatically provisioned as `client` accounts in the configured MVP lawyer workspace; no manual profile assignment is needed.
 
 ## AI configuration
 For Ollama:
