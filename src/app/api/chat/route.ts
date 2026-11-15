@@ -14,11 +14,11 @@ function casualReply(question: string, language: ReturnType<typeof detectLanguag
   /^(hi|hello|hey|good morning|good afternoon|good evening|how are you|how's it going|thanks|thank you|thx|مرحبا|مرحباً|اهلا|أهلا|أهلًا|هاي|ازيك|إزيك|عامل ايه|عامل إيه|شكرا|شكراً|متشكر|صباح الخير|مساء الخير|guten tag|hallo|guten morgen|wie gehts|danke|bonjour|salut|merci|hola|buenos dias|gracias)$/i,
  ];
  if (!patterns.some((pattern) => pattern.test(q))) return null;
- if (language === "ar") return /شكرا|شكراً|متشكر/.test(q) ? "العفو، أنا هنا لمساعدتك. لو عندك أي سؤال قانوني اتفضل اسألني." : "أهلًا بيك! 😊 أنا LegalMind AI، مساعدك في البحث والمعلومات القانونية. اتفضل، إزاي أقدر أساعدك؟";
- if (language === "de") return /danke/i.test(q) ? "Gern geschehen! Wenn Sie eine rechtliche Frage haben, helfe ich Ihnen gerne." : "Hallo! Ich bin LegalMind AI und unterstütze Sie bei rechtlichen Fragen. Wie kann ich Ihnen helfen?";
- if (language === "fr") return /merci/i.test(q) ? "Avec plaisir ! Je suis là si vous avez une question juridique." : "Bonjour ! Je suis LegalMind AI, votre assistant de recherche juridique. Comment puis-je vous aider ?";
- if (language === "es") return /gracias/i.test(q) ? "¡De nada! Estoy aquí si tienes alguna pregunta legal." : "¡Hola! Soy LegalMind AI, tu asistente de información jurídica. ¿En qué puedo ayudarte?";
- return /thank|thx/i.test(q) ? "You're welcome! I'm here if you have a legal question." : "Hi! I'm LegalMind AI, your legal research assistant. Feel free to ask me a legal question—how can I help?";
+ if (language === "ar") return /شكرا|شكراً|متشكر/.test(q) ? "العفو، أنا هنا لمساعدتك. لو عندك أي سؤال قانوني اتفضل اسألني." : "أهلًا بيك! 😊 أنا Alex، مساعدك القانوني في LegalMind AI. اتفضل، إزاي أقدر أساعدك؟";
+ if (language === "de") return /danke/i.test(q) ? "Gern geschehen! Wenn Sie eine rechtliche Frage haben, helfe ich Ihnen gerne." : "Hallo! Ich bin Alex, Ihr juristischer Assistent. Wie kann ich Ihnen helfen?";
+ if (language === "fr") return /merci/i.test(q) ? "Avec plaisir ! Je suis là si vous avez une question juridique." : "Bonjour ! Je suis Alex, votre assistant juridique. Comment puis-je vous aider ?";
+ if (language === "es") return /gracias/i.test(q) ? "¡De nada! Estoy aquí si tienes alguna pregunta legal." : "¡Hola! Soy Alex, tu asistente jurídico. ¿En qué puedo ayudarte?";
+ return /thank|thx/i.test(q) ? "You're welcome! I'm here if you have a legal question." : "Hi! I'm Alex, your legal assistant. Feel free to ask me a legal question—how can I help?";
 }
 export const runtime="nodejs";
 export async function POST(req:Request){try{

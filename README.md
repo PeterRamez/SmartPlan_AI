@@ -69,3 +69,9 @@ See [Google OAuth setup](docs/GOOGLE_OAUTH_SETUP.md) for configuring personal Gm
 Apply `supabase/migrations/0003_legal_aware_retrieval.sql` after the existing migrations. Then open **Documents** and use **Re-index knowledge base** to rebuild chunks from stored extracted text. This is important for existing BGB/GewO files: the migration backfills statute codes from filenames, while re-indexing applies the updated legal-aware chunk parser and embeddings. Staff can then open **RAG evaluation** and run the BGB/GewO provision regression suite.
 
 Queries that explicitly name a statute (for example `§ 437 BGB`) are filtered to that statute. If the requested provision itself is not present in the retrieved excerpts, LegalMind AI now reports the missing source instead of inferring the requested provision from neighboring articles. Page numbers remain unavailable for chunks when the extraction pipeline has not retained page-level offsets.
+
+## Alex consultation experience
+
+The legal chat assistant is presented to end users as **Alex**. The chat UI now uses a concise, client-friendly layout, detects Arabic message direction for right-to-left display, and provides optional follow-up prompts for deeper explanations, conditions/exceptions, and practical next steps. Supporting references are hidden behind an expandable “References used” section; raw chunk/document identifiers are not shown. Citation anchors are converted to simple numbered references that match the displayed source list.
+
+The answer-generation instructions were updated to prioritize a direct answer, conversational explanations, careful treatment of missing facts, and source-grounded legal claims. This is a presentation and prompting improvement; actual legal accuracy still depends on the quality and completeness of the indexed documents and must be tested against representative questions.

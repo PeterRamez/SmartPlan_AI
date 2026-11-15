@@ -25,12 +25,3 @@
 
 ## Important limitation
 This is an engineering improvement, not a guarantee of perfect legal retrieval or legal correctness. The benchmark contains starter prompts and statute targets, not authoritative answer keys or gold chunk IDs. A 9/10 score can only be claimed after a documented evaluation against the actual corpus and a held-out lawyer-reviewed test set.
-
-
-## Topic-aware retrieval hardening (2026-11-15)
-
-- Added high-confidence legal-topic inference for sale-defect / rescission questions.
-- When no statute is explicitly named, sale-defect questions are searched within BGB and exact provision metadata is queried for §§ 437, 434, 439, 440, 323, 441, 346, 349, 442 and 444. These are retrieval candidates, not assumptions that every provision applies.
-- Improved statutory structure parsing for numbered German paragraphs such as `(1)` and `(2)`, retaining the parent section number.
-- No SQL migration is required. Existing documents must be reindexed after deployment for corrected chunk metadata to take effect.
-- Validation note: dependency installation timed out in the build environment, so Vitest and the full Next.js build could not be run here.

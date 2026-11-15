@@ -3,10 +3,6 @@ export type LegalQuery = {
   lawCode: string | null;
   provisionNumbers: string[];
   hasExplicitProvision: boolean;
-  /** Inferred only from a high-confidence legal topic; never presented as user input. */
-  topicLawCode: string | null;
-  /** Candidate provisions to retrieve for the detected topic, not legal conclusions. */
-  relatedProvisionNumbers: string[];
 };
 
 const LAW_ALIASES: Array<[RegExp, string]> = [
@@ -42,20 +38,11 @@ export function parseLegalQuery(query: string): LegalQuery {
   for (const match of query.matchAll(pluralPattern)) {
     for (const number of match[1]?.match(/\d+[a-z]?/giu) ?? []) provisionNumbers.add(normalizeProvisionNumber(number));
   }
-  const normalizedQuery = query.normalize("NFKC").replace(/\s+/g, " ").trim();
-  const saleDefect = /defect|faulty|purchase|buyer|seller|sale contract|mangel|käufer|verkäufer|rücktritt|sachmangel|kaufvertrag|عيب|معيب|مشتري|بائع|فسخ|عقد بيع|سيارة/iu.test(normalizedQuery);
-  const employmentDismissal = /kündigung|dismiss|termination|employee|employer|employment|arbeitsrecht|arbeitnehmer|arbeitgeber|فصل|موظف|الموظف|العمل|إنهاء الخدمة|إنهاء عقد العمل/iu.test(normalizedQuery);
-  const topicLawCode = lawCode ? null : saleDefect ? "BGB" : employmentDismissal ? "KSchG" : null;
-  const relatedProvisionNumbers = saleDefect
-    ? ["437", "434", "439", "440", "323", "441", "346", "349", "442", "444"]
-    : employmentDismissal ? ["1", "4", "7", "23"] : [];
   return {
-    normalizedQuery,
+    normalizedQuery: query.normalize("NFKC").replace(/\s+/g, " ").trim(),
     lawCode,
     provisionNumbers: [...provisionNumbers],
     hasExplicitProvision: provisionNumbers.size > 0,
-    topicLawCode,
-    relatedProvisionNumbers,
   };
 }
 

@@ -1,18 +1,159 @@
 "use client";
-import { useState } from "react";
-import { Send, Plus, MessageSquare } from "lucide-react";
+
+import { useState, type FormEvent } from "react";
+import { ArrowUp, BookOpen, ChevronDown, ChevronUp, MessageSquarePlus, Sparkles, Scale } from "lucide-react";
 import type { RetrievedSource } from "@/lib/rag/retrieve";
 
 type Msg = {
   role: "user" | "assistant";
   content: string;
   citations?: RetrievedSource[];
+  language?: string;
 };
-export default function Chat(){
- const [messages,setMessages]=useState<Msg[]>([]);const [input,setInput]=useState("");const [busy,setBusy]=useState(false);const [conversationId,setConversationId]=useState<string|null>(null);const [error,setError]=useState("");const [analysisMode,setAnalysisMode]=useState(false);
- async function send(e?:React.FormEvent){e?.preventDefault();if(!input.trim()||busy)return;const question=input.trim();setInput("");setMessages(m=>[...m,{role:"user",content:question}]);setBusy(true);setError("");
-  try{const r=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question,conversationId,analysisMode})});const data=await r.json();if(!r.ok)throw new Error(data.error??"Request failed");setConversationId(data.conversationId);setMessages(m=>[...m,{role:"assistant",content:data.answer,citations:data.citations??[]}]);}
-  catch(err){setError(err instanceof Error?err.message:"Unexpected error");}finally{setBusy(false);}
- }
- return <div className="card flex min-h-[65vh] flex-col overflow-hidden"><div className="flex items-center justify-between border-b p-4"><div className="flex items-center gap-2 text-sm font-semibold"><MessageSquare size={17}/> Consultation</div><button className="btn btn-secondary text-sm" onClick={()=>{setMessages([]);setConversationId(null);setError("");}}><Plus size={15}/> New chat</button></div><div className="flex-1 space-y-5 overflow-y-auto p-5">{messages.length===0&&<div className="mx-auto mt-16 max-w-md text-center"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-800"><MessageSquare/></div><h2 className="mt-4 font-semibold">What legal question can we research?</h2><p className="mt-2 text-sm leading-6 text-slate-500">Ask in Arabic, English, German, French, or Spanish. The answer will cite stored sources when available.</p></div>}{messages.map((m,i)=><div key={i} className={`max-w-[90%] rounded-xl p-4 ${m.role==="user"?"ml-auto bg-blue-900 text-white":"border bg-slate-50"}`} dir={/[\u0600-\u06FF]/.test(m.content)?"rtl":"auto"}><div className="whitespace-pre-wrap text-sm leading-7">{m.content}</div>{m.citations && m.citations.length > 0 &&<div className="mt-4 border-t border-slate-200 pt-3"><div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Retrieved sources</div>{m.citations.map((c)=><div key={c.id} className="mb-2 rounded-lg border bg-white p-3 text-xs text-slate-700"><div className="font-semibold">{c.title??"Legal document"} · {c.law_code??c.law_name??"Unknown law"} · §{c.article_number??"—"} {c.paragraph_number?`· Absatz ${c.paragraph_number}`:""}</div><p className="mt-1 line-clamp-4 leading-5">{c.content}</p><div className="mt-1 text-slate-400">File: {c.filename??c.title??"—"} · Page: {c.page_number??"not indexed"} · Chunk ID: {c.id}</div></div>)}</div>}</div>)}{busy&&<div className="text-sm text-slate-500">Searching legal sources and preparing an answer…</div>}</div>{error&&<div className="mx-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}<form onSubmit={send} className="flex gap-2 border-t bg-white p-4"><textarea className="field min-h-12 resize-y" rows={2} placeholder="Ask a legal question…" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}/><button disabled={busy||!input.trim()} className="btn btn-primary self-end"><Send size={17}/></button></form><div className="flex items-center gap-2 border-t px-4 py-2 text-xs text-slate-500"><input id="case-analysis-mode" type="checkbox" checked={analysisMode} onChange={(event)=>setAnalysisMode(event.target.checked)} /><label htmlFor="case-analysis-mode">Structured case analysis mode</label><span className="ml-auto">Uses recent messages as case context</span></div><div className="px-4 pb-3 text-center text-[11px] text-slate-400">AI-generated information is not a substitute for advice from a qualified lawyer.</div></div>;
+
+function isArabic(text: string) {
+  return /[\u0600-\u06FF]/.test(text);
+}
+
+function sourceLabel(source: RetrievedSource) {
+  const law = source.law_code ?? source.law_name;
+  const provision = source.article_number ? `§ ${source.article_number}` : null;
+  return [law, provision, source.paragraph_number ? `Abs. ${source.paragraph_number}` : null]
+    .filter(Boolean).join(" · ") || source.title || "Document reference";
+}
+
+function followUpOptions(language: string | undefined) {
+  if (language === "de") return ["Können Sie das genauer erklären?", "Welche Voraussetzungen und Ausnahmen gelten?", "Was sollte ich als Nächstes tun?"];
+  if (language === "fr") return ["Pouvez-vous expliquer davantage ?", "Quelles sont les conditions et exceptions ?", "Quelles sont les prochaines étapes ?"];
+  if (language === "es") return ["¿Puede explicarlo con más detalle?", "¿Qué condiciones y excepciones existen?", "¿Qué debería hacer ahora?"];
+  if (language === "en") return ["Explain this in more detail", "What conditions and exceptions apply?", "What should I do next?"];
+  return ["اشرحلي الإجابة بشكل أعمق", "إيه الشروط والاستثناءات اللي ممكن تغير النتيجة؟", "إيه الخطوات العملية اللي أقدر أعملها؟"];
+}
+
+export default function Chat() {
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [analysisMode, setAnalysisMode] = useState(false);
+  const [openSources, setOpenSources] = useState<number[]>([]);
+
+
+  async function send(e?: FormEvent, suppliedQuestion?: string) {
+    e?.preventDefault();
+    const question = (suppliedQuestion ?? input).trim();
+    if (!question || busy) return;
+    setInput("");
+    setMessages((current) => [...current, { role: "user", content: question }]);
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ question, conversationId, analysisMode }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Request failed");
+      setConversationId(data.conversationId);
+      setMessages((current) => [...current, {
+        role: "assistant", content: data.answer, citations: data.citations ?? [], language: data.language,
+      }]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function newChat() {
+    setMessages([]); setConversationId(null); setError(""); setOpenSources([]);
+  }
+
+  return (
+    <section className="alex-panel">
+      <header className="alex-header">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="alex-avatar"><Scale size={20} /></div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2"><h2 className="font-semibold text-slate-900">Alex</h2><span className="alex-status">AI legal assistant</span></div>
+            <p className="text-xs text-slate-500">LegalMind consultation</p>
+          </div>
+        </div>
+        <button type="button" className="alex-new-chat" onClick={newChat}><MessageSquarePlus size={15} /><span>New chat</span></button>
+      </header>
+
+      <div className="alex-messages">
+        {messages.length === 0 && (
+          <div className="alex-welcome">
+            <div className="alex-welcome-icon"><Sparkles size={22} /></div>
+            <p className="text-sm font-medium text-blue-700">Hello, I’m Alex.</p>
+            <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">How can I help you today?</h3>
+            <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-slate-500">Tell me what happened or ask a legal question. I’ll explain the relevant rules in clear language and show you the references behind my answer.</p>
+            <div className="mt-6 grid w-full max-w-xl gap-2 text-left sm:grid-cols-2">
+              {["What are my rights if a product is defective?", "Explain a German legal provision", "Can I withdraw from a contract?", "Help me understand a legal document"].map((sample) => (
+                <button key={sample} type="button" className="alex-suggestion" onClick={() => setInput(sample)}>{sample}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.map((message, index) => {
+          const rtl = isArabic(message.content);
+          const options = message.role === "assistant" && index === messages.length - 1 ? followUpOptions(message.language) : [];
+          const hasSources = Boolean(message.citations?.length);
+          return (
+            <article key={index} className={`alex-message-row ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+              {message.role === "assistant" && <div className="alex-mini-avatar"><Scale size={15} /></div>}
+              <div className={`alex-bubble ${message.role === "user" ? "alex-user-bubble" : "alex-assistant-bubble"}`} dir={rtl ? "rtl" : "auto"}>
+                {message.role === "assistant" && <div className="mb-2 text-xs font-semibold text-blue-700">Alex</div>}
+                <div className="whitespace-pre-wrap text-[14px] leading-8">{message.content}</div>
+
+                {hasSources && (
+                  <div className="mt-4 border-t border-slate-200 pt-3" dir="auto">
+                    <button type="button" className="alex-sources-toggle" onClick={() => setOpenSources((current) => current.includes(index) ? current.filter((n) => n !== index) : [...current, index])}>
+                      <BookOpen size={15} /><span>References used ({message.citations!.length})</span>
+                      {openSources.includes(index) ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                    </button>
+                    {openSources.includes(index) && (
+                      <div className="mt-3 space-y-2">
+                        {message.citations!.map((source, sourceIndex) => (
+                          <div key={source.id} className="alex-source-card">
+                            <div className="text-xs font-semibold text-slate-800">[{sourceIndex + 1}] {sourceLabel(source)}</div>
+                            <p className="mt-1 text-xs leading-6 text-slate-600">{source.content}</p>
+                            <p className="mt-1 text-[11px] text-slate-400">{source.filename ?? source.title ?? "Knowledge base document"}{source.page_number ? ` · Page ${source.page_number}` : ""}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {options.length > 0 && (
+                  <div className="mt-4 border-t border-slate-200 pt-3" dir="auto">
+                    <p className="mb-2 text-xs font-medium text-slate-500">Want to explore this further?</p>
+                    <div className="flex flex-wrap gap-2">
+                      {options.map((option) => <button key={option} type="button" disabled={busy} className="alex-followup" onClick={() => send(undefined, option)}>{option}</button>)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </article>
+          );
+        })}
+        {busy && <div className="flex items-center gap-2 pl-9 text-sm text-slate-500"><span className="alex-typing-dots"><i /><i /><i /></span>Alex is reviewing the relevant legal sources…</div>}
+        {error && <div className="mx-auto max-w-2xl rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      </div>
+
+      <form onSubmit={(event) => send(event)} className="alex-composer">
+        <textarea aria-label="Ask Alex a legal question" className="alex-input" rows={2} placeholder="Ask Alex anything about your legal situation…" value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} />
+        <button type="submit" disabled={busy || !input.trim()} className="alex-send" aria-label="Send question"><ArrowUp size={19} /></button>
+      </form>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3 text-[11px] text-slate-400 sm:px-6">
+        <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={analysisMode} onChange={(event) => setAnalysisMode(event.target.checked)} /> Detailed case analysis</label>
+        <span>AI information is not a substitute for advice from a qualified lawyer.</span>
+      </div>
+    </section>
+  );
 }
