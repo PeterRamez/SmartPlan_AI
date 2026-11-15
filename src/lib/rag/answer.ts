@@ -89,7 +89,7 @@ export async function answerWithSources(
 ) {
   const legalQuery = parseLegalQuery(question);
   if (!sources.length) {
-    const requestedLaw = legalQuery.lawCode;
+    const requestedLaw = legalQuery.lawCode ?? legalQuery.topicLawCode;
     const noRelevantSources: Record<Language, string> = {
       ar: requestedLaw ? `لم أجد في قاعدة المعرفة أي مقاطع قانونية مسترجعة من ${requestedLaw} مرتبطة بسؤالك. لذلك لا أستطيع تحديد الحكم القانوني دون اختلاق معلومات. تأكد من رفع ملف ${requestedLaw} وفهرسته، ثم أعد السؤال.` : insufficient.ar,
       en: requestedLaw ? `No relevant excerpts from ${requestedLaw} were retrieved. I cannot determine the legal position without inventing information. Upload and index the ${requestedLaw} text, then ask again.` : insufficient.en,

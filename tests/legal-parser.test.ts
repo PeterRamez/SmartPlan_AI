@@ -23,4 +23,23 @@ describe("German legal structure parser",()=>{
   const chunks=chunkLegalText("§ 7 Synthetischer Titel\n"+("Dies ist ein synthetischer Rechtstext. ".repeat(200)),300);
   expect(chunks.length).toBeGreaterThan(1);expect(chunks.every(c=>c.articleNumber==="7")).toBe(true);
  });
+ it("splits concatenated provision headings after PDF sentence boundaries",()=>{
+  const units=parseGermanLegalStructure("§ 346 Rechtsfolgen. § 442 Kenntnis des Käufers\nDer Käufer kennt den Mangel.");
+  expect(units.some(unit=>unit.articleNumber==="442" && unit.content.includes("Kenntnis des Käufers"))).toBe(true);
+ });
+ it("recognizes numbered statutory paragraphs",()=>{
+  const units=parseGermanLegalStructure("§ 437 Rechte des Käufers\n(1) Der Käufer kann Nacherfüllung verlangen.\n(2) Weitere Rechte bleiben unberührt.");
+  expect(units.find(unit=>unit.paragraphNumber==="1")?.articleNumber).toBe("437");
+  expect(units.find(unit=>unit.paragraphNumber==="2")?.articleNumber).toBe("437");
+ });
+
+ it("keeps adjacent BGB provisions in separate metadata units",()=>{
+  const extracted="§ 346 Abs. 1 und § 347 Abs. 1 finden entsprechende Anwendung. § 442 Kenntnis des Käufers\nDie Rechte des Käufers sind ausgeschlossen. § 443 Garantie\nDer Verkäufer übernimmt eine Garantie.";
+  const units=parseGermanLegalStructure(extracted);
+  expect(units.map(unit=>unit.articleNumber)).toContain("346");
+  expect(units.map(unit=>unit.articleNumber)).toContain("442");
+  expect(units.map(unit=>unit.articleNumber)).toContain("443");
+  expect(units.find(unit=>unit.articleNumber==="442")?.content).not.toContain("§ 443");
+ });
+
 });

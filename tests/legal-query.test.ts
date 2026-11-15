@@ -43,3 +43,28 @@ describe("legal query parsing and statute metadata", () => {
     expect(chunks).toEqual(["BGB"]);
   });
 });
+
+describe("topic-aware statutory retrieval targets", () => {
+  it("routes an Arabic vehicle-defect question to BGB sale and rescission provisions", () => {
+    expect(parseLegalQuery("اشتريت سيارة وظهر بها عيب بعد التسليم، هل أستطيع فسخ العقد؟")).toMatchObject({
+      topicLawCode: "BGB",
+      relatedProvisionNumbers: ["437", "434", "439", "440", "323", "441", "346", "349", "442", "444"],
+      lawCode: null,
+      hasExplicitProvision: false,
+    });
+  });
+
+  it("maps a German buyer rescission question to BGB even without an explicit statute code", () => {
+    expect(parseLegalQuery("Ein Käufer hat bei einem Sachmangel Rechte und möchte vom Kaufvertrag zurücktreten.")).toMatchObject({
+      topicLawCode: "BGB",
+      relatedProvisionNumbers: expect.arrayContaining(["437", "323", "440"]),
+    });
+  });
+
+  it("does not override an explicitly named statute with topic inference", () => {
+    expect(parseLegalQuery("Sachmangel nach BGB: Rücktritt?")).toMatchObject({
+      lawCode: "BGB",
+      topicLawCode: null,
+    });
+  });
+});

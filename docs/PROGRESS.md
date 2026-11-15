@@ -146,3 +146,11 @@ Retry dependency installation when npm registry access is available. Then run `n
 - Added regression tests for KSchG detection and Arabic-to-German employment keyword expansion.
 
 Verification status: source changes reviewed; `npm install --ignore-scripts --no-audit --no-fund` timed out in this environment, so TypeScript, Vitest, ESLint, and production build have not been run. Supabase migration and live Cloudflare/Supabase retrieval have not been executed or verified.
+
+
+### 2026-11-15 — Retrieval hardening
+- Added topic-based BGB routing for sale-defect and rescission queries when the user does not explicitly name the statute.
+- Added exact-provision retrieval candidates to reduce dependence on multilingual embedding similarity.
+- Parser now recognizes `(1)` / `(2)` paragraph headings and associates them with the preceding statutory section.
+- Existing indexed documents require reindexing after deployment.
+- Automated tests/build remain unverified because `npm install` timed out and dependencies were unavailable in this environment.

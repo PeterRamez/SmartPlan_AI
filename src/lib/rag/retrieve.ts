@@ -71,8 +71,17 @@ function reciprocalRankFusion(
 export async function retrieveLegalContext(
   supabase: SupabaseClient, lawyerId: string, query: string, topK = 8
 ): Promise<RetrievedSource[]> {
-  const safeTopK = Math.max(1, Math.min(Math.floor(topK) || 8, 20));
   const parsed = parseLegalQuery(query);
+  // A topic-mapped legal query needs room for its core rule and key exceptions.
+  const effectiveTopK = !parsed.provisionNumbers.length && parsed.relatedProvisionNumbers.length
+    ? Math.max(topK, parsed.relatedProvisionNumbers.length)
+    : topK;
+  const safeTopK = Math.max(1, Math.min(Math.floor(effectiveTopK) || 8, 20));
+  // Prefer an explicitly named statute; otherwise use only high-confidence topic inference.
+  const retrievalLawCode = parsed.lawCode ?? parsed.topicLawCode;
+  const targetProvisionNumbers = parsed.provisionNumbers.length
+    ? parsed.provisionNumbers
+    : parsed.relatedProvisionNumbers;
   const selectFields = "id,document_id,content,law_name,law_code,article_number,paragraph_number,page_number,metadata";
   let semanticRows: ChunkRow[] = [];
   let semanticFailure: string | null = null;
@@ -81,10 +90,10 @@ export async function retrieveLegalContext(
   // temporarily unavailable. This is especially important for explicit § lookups.
   try {
     const vector = await embedText(query);
-    const semanticCall = parsed.lawCode
+    const semanticCall = retrievalLawCode
       ? supabase.rpc("match_document_chunks_by_law", {
           query_embedding: `[${vector.join(",")}]`, match_count: safeTopK * 4,
-          filter_lawyer_id: lawyerId, filter_law_code: parsed.lawCode,
+          filter_lawyer_id: lawyerId, filter_law_code: retrievalLawCode,
         })
       : supabase.rpc("match_document_chunks", {
           query_embedding: `[${vector.join(",")}]`, match_count: safeTopK * 4,
@@ -100,9 +109,9 @@ export async function retrieveLegalContext(
   const keywordRowsCollected: ChunkRow[] = [];
   // Run both the user's original query and a German legal-vocabulary query.
   // This is essential for Arabic/English questions against German statute files.
-  for (const searchText of buildLegalSearchQueries(parsed.normalizedQuery, parsed.lawCode)) {
+  for (const searchText of buildLegalSearchQueries(parsed.normalizedQuery, retrievalLawCode)) {
     let keywordQuery = supabase.from("document_chunks").select(selectFields).eq("lawyer_id", lawyerId);
-    if (parsed.lawCode) keywordQuery = keywordQuery.eq("law_code", parsed.lawCode);
+    if (retrievalLawCode) keywordQuery = keywordQuery.eq("law_code", retrievalLawCode);
     const { data, error: keywordError } = await keywordQuery
       .textSearch("search_vector", searchText, { type: searchText === parsed.normalizedQuery ? "plain" : "websearch", config: "simple" })
       .limit(safeTopK * 4);
@@ -113,10 +122,10 @@ export async function retrieveLegalContext(
 
   let exactRows: ChunkRow[] = [];
   let expandedRows: ChunkRow[] = [];
-  if (parsed.provisionNumbers.length) {
+  if (targetProvisionNumbers.length) {
     let exactQuery = supabase.from("document_chunks").select(selectFields)
-      .eq("lawyer_id", lawyerId).in("article_number", parsed.provisionNumbers.slice(0, MAX_PROVISION_EXPANSION));
-    if (parsed.lawCode) exactQuery = exactQuery.eq("law_code", parsed.lawCode);
+      .eq("lawyer_id", lawyerId).in("article_number", targetProvisionNumbers.slice(0, MAX_PROVISION_EXPANSION));
+    if (retrievalLawCode) exactQuery = exactQuery.eq("law_code", retrievalLawCode);
     const { data, error: exactError } = await exactQuery.limit(safeTopK * 5);
     if (exactError) throw new Error(`Exact provision retrieval failed: ${exactError.message}`);
     exactRows = (data ?? []) as ChunkRow[];
@@ -132,7 +141,7 @@ export async function retrieveLegalContext(
     if (!row.law_code) continue;
     const refs = extractProvisionReferences(row.content).filter((ref) => !parsed.provisionNumbers.includes(ref));
     if (!refs.length) continue;
-    if (parsed.lawCode && row.law_code !== parsed.lawCode) continue;
+    if (retrievalLawCode && row.law_code !== retrievalLawCode) continue;
     const bucket = expansionPairs.get(row.law_code) ?? new Set<string>();
     refs.forEach((ref) => bucket.add(ref));
     expansionPairs.set(row.law_code, bucket);
@@ -150,8 +159,8 @@ export async function retrieveLegalContext(
     .filter((row) => !exactRows.some((exact) => exact.id === row.id));
 
   const ranked = reciprocalRankFusion(
-    semanticRows, keywordRows, exactRows, expandedRows, safeTopK, parsed.lawCode,
-    [parsed.normalizedQuery, ...buildLegalSearchQueries(parsed.normalizedQuery, parsed.lawCode).slice(1)].join(" ")
+    semanticRows, keywordRows, exactRows, expandedRows, safeTopK, retrievalLawCode,
+    [parsed.normalizedQuery, ...buildLegalSearchQueries(parsed.normalizedQuery, retrievalLawCode).slice(1)].join(" ")
   );
   if (!ranked.length) {
     if (semanticFailure) throw new Error(`Vector retrieval unavailable and no keyword/exact matches were found: ${semanticFailure}`);
