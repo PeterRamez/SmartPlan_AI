@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { embedText } from "@/lib/ai/embeddings";
-import { parseLegalQuery } from "./legal-query";
+import { buildLegalSearchQueries, parseLegalQuery } from "./legal-query";
 
 export type RetrievedSource = {
   id: string;
@@ -34,13 +34,13 @@ export function extractProvisionReferences(text: string): string[] {
 }
 
 function reciprocalRankFusion(
-  semanticRows: ChunkRow[], keywordRows: ChunkRow[], exactRows: ChunkRow[], topK: number,
+  semanticRows: ChunkRow[], keywordRows: ChunkRow[], exactRows: ChunkRow[], expandedRows: ChunkRow[], topK: number,
   lawCode: string | null, query: string
 ): RetrievedSource[] {
   const scores = new Map<string, { row: ChunkRow; score: number }>();
   const addRanked = (rows: ChunkRow[], weight: number) => rows.forEach((row, index) => {
     // A strict law-code match is preferred when the question names a statute.
-    if (lawCode && row.law_code && row.law_code !== lawCode) return;
+    if (lawCode && row.law_code !== lawCode) return;
     const score = weight / (60 + index + 1);
     const existing = scores.get(row.id);
     if (existing) existing.score += score;
@@ -49,9 +49,11 @@ function reciprocalRankFusion(
   addRanked(semanticRows, 1);
   addRanked(keywordRows, 1.15);
   addRanked(exactRows, 3);
+  addRanked(expandedRows, 1.35);
   // Deterministic second-stage reranking rewards legal metadata matches and
   // query-term overlap without adding a second model call or provider cost.
-  const queryTokens = new Set(query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
+  const stopWords = new Set(["the", "and", "for", "with", "from", "that", "this", "was", "were", "what", "when", "where", "which", "هل", "من", "في", "على", "ما", "هو", "هي", "عن", "الى", "إلى", "ذلك", "هذا", "هذه"]);
+  const queryTokens = new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []).filter((token) => !stopWords.has(token)));
   const candidates = [...scores.values()].map(({ row, score }) => {
     const provisionMatch = row.article_number && exactRows.some((exact) => exact.id === row.id) ? 1 : 0;
     const lawMatch = lawCode && row.law_code === lawCode ? 1 : 0;
@@ -95,14 +97,22 @@ export async function retrieveLegalContext(
     semanticFailure = error instanceof Error ? error.message : "Unknown vector retrieval error";
   }
 
-  let keywordQuery = supabase.from("document_chunks").select(selectFields).eq("lawyer_id", lawyerId);
-  if (parsed.lawCode) keywordQuery = keywordQuery.eq("law_code", parsed.lawCode);
-  const { data: keyword, error: keywordError } = await keywordQuery
-    .textSearch("search_vector", parsed.normalizedQuery, { type: "plain", config: "simple" })
-    .limit(safeTopK * 4);
-  if (keywordError) throw new Error(`Keyword retrieval failed: ${keywordError.message}`);
+  const keywordRowsCollected: ChunkRow[] = [];
+  // Run both the user's original query and a German legal-vocabulary query.
+  // This is essential for Arabic/English questions against German statute files.
+  for (const searchText of buildLegalSearchQueries(parsed.normalizedQuery, parsed.lawCode)) {
+    let keywordQuery = supabase.from("document_chunks").select(selectFields).eq("lawyer_id", lawyerId);
+    if (parsed.lawCode) keywordQuery = keywordQuery.eq("law_code", parsed.lawCode);
+    const { data, error: keywordError } = await keywordQuery
+      .textSearch("search_vector", searchText, { type: searchText === parsed.normalizedQuery ? "plain" : "websearch", config: "simple" })
+      .limit(safeTopK * 4);
+    if (keywordError) throw new Error(`Keyword retrieval failed: ${keywordError.message}`);
+    keywordRowsCollected.push(...((data ?? []) as ChunkRow[]));
+  }
+  const keywordRows = [...new Map(keywordRowsCollected.map((row) => [row.id, row])).values()];
 
   let exactRows: ChunkRow[] = [];
+  let expandedRows: ChunkRow[] = [];
   if (parsed.provisionNumbers.length) {
     let exactQuery = supabase.from("document_chunks").select(selectFields)
       .eq("lawyer_id", lawyerId).in("article_number", parsed.provisionNumbers.slice(0, MAX_PROVISION_EXPANSION));
@@ -114,23 +124,34 @@ export async function retrieveLegalContext(
 
   // Expand cross-references only inside the requested law. This prevents
   // unrelated GewO provisions from contaminating a BGB query.
-  const keywordRows = (keyword ?? []) as ChunkRow[];
   const seedRows = [...semanticRows, ...keywordRows, ...exactRows].slice(0, safeTopK * 3);
-  const referenced = new Set<string>();
-  for (const row of seedRows) for (const ref of extractProvisionReferences(row.content)) referenced.add(ref);
-  for (const ref of parsed.provisionNumbers) referenced.delete(ref);
-  const expansionRefs = [...referenced].slice(0, MAX_PROVISION_EXPANSION);
-  if (expansionRefs.length) {
-    let expansionQuery = supabase.from("document_chunks").select(selectFields)
-      .eq("lawyer_id", lawyerId).in("article_number", expansionRefs);
-    if (parsed.lawCode) expansionQuery = expansionQuery.eq("law_code", parsed.lawCode);
-    const { data, error: expansionError } = await expansionQuery.limit(safeTopK * 3);
-    if (expansionError) throw new Error(`Cross-reference retrieval failed: ${expansionError.message}`);
-    exactRows = [...exactRows, ...((data ?? []) as ChunkRow[])];
+  // Expand statutory references only within the same statute as their source
+  // chunk. This avoids pulling § numbers from unrelated Acts into the answer.
+  const expansionPairs = new Map<string, Set<string>>();
+  for (const row of seedRows) {
+    if (!row.law_code) continue;
+    const refs = extractProvisionReferences(row.content).filter((ref) => !parsed.provisionNumbers.includes(ref));
+    if (!refs.length) continue;
+    if (parsed.lawCode && row.law_code !== parsed.lawCode) continue;
+    const bucket = expansionPairs.get(row.law_code) ?? new Set<string>();
+    refs.forEach((ref) => bucket.add(ref));
+    expansionPairs.set(row.law_code, bucket);
   }
+  for (const [lawCode, refs] of expansionPairs) {
+    const expansionRefs = [...refs].slice(0, MAX_PROVISION_EXPANSION);
+    if (!expansionRefs.length) continue;
+    const { data, error: expansionError } = await supabase.from("document_chunks").select(selectFields)
+      .eq("lawyer_id", lawyerId).eq("law_code", lawCode).in("article_number", expansionRefs)
+      .limit(safeTopK * 2);
+    if (expansionError) throw new Error(`Cross-reference retrieval failed: ${expansionError.message}`);
+    expandedRows.push(...((data ?? []) as ChunkRow[]));
+  }
+  expandedRows = [...new Map(expandedRows.map((row) => [row.id, row])).values()]
+    .filter((row) => !exactRows.some((exact) => exact.id === row.id));
 
   const ranked = reciprocalRankFusion(
-    semanticRows, keywordRows, exactRows, safeTopK, parsed.lawCode, parsed.normalizedQuery
+    semanticRows, keywordRows, exactRows, expandedRows, safeTopK, parsed.lawCode,
+    [parsed.normalizedQuery, ...buildLegalSearchQueries(parsed.normalizedQuery, parsed.lawCode).slice(1)].join(" ")
   );
   if (!ranked.length) {
     if (semanticFailure) throw new Error(`Vector retrieval unavailable and no keyword/exact matches were found: ${semanticFailure}`);

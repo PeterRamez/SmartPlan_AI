@@ -13,10 +13,11 @@ A tenant-aware multilingual legal knowledge assistant built with Next.js, Supaba
 - Resumable batch ingestion endpoint protected by `INGESTION_SECRET`.
 - Embedding adapters for Ollama BGE-M3 and configurable custom endpoint.
 - Cloudflare Workers AI and Ollama text-generation adapters.
-- Statute-aware hybrid vector + PostgreSQL full-text + exact paragraph retrieval, reciprocal-rank fusion, and deterministic reranking.
+- Statute-aware hybrid vector + PostgreSQL full-text + exact paragraph retrieval, reciprocal-rank fusion, deterministic reranking, and controlled same-statute cross-reference expansion.
 - Legal-code metadata, same-statute cross-reference expansion, page-aware PDF extraction, and strict requested-provision coverage checks.
 - Conversation context and optional structured case-analysis mode.
 - Staff RAG evaluation dashboard and stored regression runs; bulk re-indexing from extracted text.
+- Multilingual legal-topic expansion for employment, sale/defect, criminal, fraud, rental, family, and inheritance questions.
 - Persisted conversations/messages and source references.
 - Synthetic fixtures explicitly labelled as test-only.
 
@@ -26,7 +27,7 @@ Node.js 20+, npm, a Supabase project with PostgreSQL and `vector` extension. For
 ## Quick start
 1. `npm install`
 2. Copy `.env.example` to `.env.local` and fill in Supabase values.
-3. Run all SQL migrations in `supabase/migrations/` in numeric order (`0001`, `0002`, then `0003`) in Supabase SQL Editor.
+3. Run all SQL migrations in `supabase/migrations/` in numeric order (`0001` through `0005`) in Supabase SQL Editor.
 4. In Supabase Auth, enable email/password sign-in and configure redirect URLs (`http://localhost:3000/auth/callback` and your deployed URL).
 5. `npm run dev`
 6. Visit `/register`, create the first account, then assign its role and lawyer tenant in Supabase (see `docs/SETUP.md`).

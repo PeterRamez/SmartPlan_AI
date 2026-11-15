@@ -13,6 +13,8 @@ describe("legal reasoning prompt", () => {
   it("requires disclosure when referenced legal provisions are missing", () => {
     const prompt = buildLegalSystemPrompt("de");
     expect(prompt).toContain("If a required provision is absent");
-    expect(prompt).toContain("Missing Facts and Missing Sources");
+    expect(prompt).toContain("QUESTION-FIRST ANSWERING");
+    expect(prompt).toContain("Do not answer a neighboring legal topic");
+    expect(prompt).toContain("Direct Answer");
   });
 });

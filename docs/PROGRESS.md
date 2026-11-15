@@ -133,3 +133,16 @@ Retry dependency installation when npm registry access is available. Then run `n
 - PDF extraction now preserves page markers, and the legal parser carries page numbers into chunks and citations when the PDF extractor exposes them. Text/DOCX inputs without page structure continue to report page as unavailable rather than inventing one.
 - Added a safe re-index write sequence: compute replacement embeddings first, upsert current chunks, then delete only stale tail chunks.
 - Exact provision retrieval can fall back to keyword/exact database matches if the embedding provider is unavailable; a provider failure is surfaced if no other retrieval path returns evidence.
+
+
+## 2026-11-15 — question relevance and employment-law retrieval fixes
+
+- Added German employment statute recognition: KSchG, TzBfG, ArbZG, ArbGG, BetrVG, AGG, BUrlG, and EFZG.
+- Added cross-language legal keyword expansion for Arabic/English employment, defective-sale, and theft questions so keyword search can find German statutory text.
+- Explicit statute queries now reject retrieved chunks whose `law_code` is different or unknown, rather than allowing unrelated statutes into the final ranking.
+- Updated the answer instructions to answer the exact question first, ignore unrelated retrieved excerpts, and avoid padding with neighboring legal topics.
+- Added a clear response when no excerpts from the explicitly requested statute are retrieved.
+- Added migration `0004_expand_german_statutes.sql` to backfill employment-law statute codes for already uploaded documents/chunks. Apply it in Supabase, then reindex relevant documents if their chunk metadata remains empty.
+- Added regression tests for KSchG detection and Arabic-to-German employment keyword expansion.
+
+Verification status: source changes reviewed; `npm install --ignore-scripts --no-audit --no-fund` timed out in this environment, so TypeScript, Vitest, ESLint, and production build have not been run. Supabase migration and live Cloudflare/Supabase retrieval have not been executed or verified.

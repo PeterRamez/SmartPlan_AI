@@ -17,6 +17,14 @@ const LAW_ALIASES: Array<[RegExp, string]> = [
   [/\bSGB\s*([IVX]+)?\b/iu, "SGB"],
   [/\bAO\b|abgabenordnung/iu, "AO"],
   [/\bUStG\b|umsatzsteuergesetz/iu, "UStG"],
+  [/\bKSchG\b|kündigungsschutzgesetz/iu, "KSchG"],
+  [/\bTzBfG\b|teilzeit- und befristungsgesetz/iu, "TzBfG"],
+  [/\bArbZG\b|arbeitszeitgesetz/iu, "ArbZG"],
+  [/\bArbGG\b|arbeitsgerichtsgesetz/iu, "ArbGG"],
+  [/\bBetrVG\b|betriebsverfassungsgesetz/iu, "BetrVG"],
+  [/\bAGG\b|allgemeines gleichbehandlungsgesetz/iu, "AGG"],
+  [/\bBUrlG\b|bundesurlaubsgesetz/iu, "BUrlG"],
+  [/\bEFZG\b|entgeltfortzahlungsgesetz/iu, "EFZG"],
 ];
 
 export function normalizeProvisionNumber(value: string): string {
@@ -44,4 +52,51 @@ export function inferLawCode(filename: string, text = ""): string | null {
   for (const [pattern, code] of LAW_ALIASES) if (pattern.test(filename)) return code;
   for (const [pattern, code] of LAW_ALIASES) if (pattern.test(text.slice(0, 6000))) return code;
   return null;
+}
+
+
+/** German statutory vocabulary supplements multilingual embeddings when users ask
+ * in Arabic/English/French/Spanish but the indexed legislation is German. */
+const GERMAN_LEGAL_TERMS: Record<string, string[]> = {
+  KSchG: ["Kündigungsschutz", "Arbeitsverhältnis", "Arbeitnehmer", "Arbeitgeber", "sozial ungerechtfertigt", "personenbedingt", "verhaltensbedingt", "betriebsbedingt", "Wartezeit", "Betriebsgröße"],
+  TzBfG: ["Teilzeit", "Befristung", "Arbeitsvertrag", "Arbeitsverhältnis", "sachlicher Grund", "Entfristung"],
+  ArbZG: ["Arbeitszeit", "Ruhezeit", "Überstunden", "Arbeitnehmer", "Höchstarbeitszeit", "Pausen"],
+  BGB: ["Bürgerliches Gesetzbuch", "Anspruch", "Vertrag", "Pflichtverletzung", "Schadensersatz", "Rücktritt", "Kaufvertrag", "Sachmangel"],
+  HGB: ["Handelsgeschäft", "Kaufmann", "Handelsvertreter", "Handelsgesellschaft"],
+  StGB: ["Straftat", "Vorsatz", "Tatbestand", "Rechtswidrigkeit", "Schuld", "Strafbarkeit"],
+  GewO: ["Gewerbe", "Gewerbetreibender", "Erlaubnis", "Gewerbeordnung"],
+  ZPO: ["Zivilprozess", "Klage", "Beweislast", "Urteil", "Zuständigkeit"],
+  StPO: ["Strafverfahren", "Ermittlungsverfahren", "Beschuldigter", "Beweis", "Durchsuchung"],
+  GG: ["Grundrecht", "Menschenwürde", "Gleichheit", "Verhältnismäßigkeit", "Grundgesetz"],
+  AGG: ["Benachteiligung", "Diskriminierung", "Belästigung", "Entschädigung", "Gleichbehandlung"],
+  BetrVG: ["Betriebsrat", "Mitbestimmung", "Anhörung", "Betriebsvereinbarung"],
+  BUrlG: ["Urlaub", "Urlaubsanspruch", "Erholungsurlaub", "Urlaubsabgeltung"],
+  EFZG: ["Entgeltfortzahlung", "Arbeitsunfähigkeit", "Krankheit", "Lohnfortzahlung"],
+};
+
+const LEGAL_TOPIC_TERMS: Array<{ pattern: RegExp; terms: string[] }> = [
+  { pattern: /kündigung|dismiss|termination|employee|employer|employment|arbeitsrecht|arbeitnehmer|arbeitgeber|فصل|موظف|الموظف|العمل|إنهاء الخدمة|إنهاء عقد العمل/iu,
+    terms: ["Kündigung", "Kündigungsschutz", "Kündigungsfrist", "ordentliche Kündigung", "außerordentliche Kündigung", "Arbeitsverhältnis", "Arbeitnehmer", "Arbeitgeber", "sozial ungerechtfertigt", "Schriftform", "Anhörung Betriebsrat"] },
+  { pattern: /defect|faulty|purchase|buyer|seller|sale contract|mangel|käufer|verkäufer|rücktritt|عيب|معيب|مشتري|بائع|فسخ|عقد بيع/iu,
+    terms: ["Sachmangel", "Kaufvertrag", "Käufer", "Verkäufer", "Nacherfüllung", "Rücktritt", "Minderung", "Gefahrübergang", "Fristsetzung"] },
+  { pattern: /theft|steal|larceny|diebstahl|unterschlagung|سرقة|اختلاس/iu,
+    terms: ["Diebstahl", "Wegnahme", "fremde bewegliche Sache", "Zueignungsabsicht", "Unterschlagung"] },
+  { pattern: /fraud|betrug|احتيال|نصب/iu,
+    terms: ["Betrug", "Täuschung", "Irrtum", "Vermögensverfügung", "Vermögensschaden", "Bereicherungsabsicht"] },
+  { pattern: /rent|lease|miete|mietvertrag|إيجار|مؤجر|مستأجر/iu,
+    terms: ["Mietvertrag", "Mietsache", "Mietmangel", "Mietminderung", "Kündigung Mietverhältnis", "Kaution"] },
+  { pattern: /divorce|marriage|scheidung|ehe|طلاق|زواج/iu,
+    terms: ["Scheidung", "Ehe", "Ehegatten", "Versorgungsausgleich", "Zugewinnausgleich", "Unterhalt"] },
+  { pattern: /inherit|erbe|erbschaft|وصية|ميراث|تركة/iu,
+    terms: ["Erbrecht", "Erbschaft", "Testament", "Erbe", "Pflichtteil", "Nachlass"] },
+];
+
+export function buildLegalSearchQueries(query: string, lawCode: string | null): string[] {
+  const normalized = query.normalize("NFKC").replace(/\s+/g, " ").trim();
+  const statuteTerms = lawCode ? GERMAN_LEGAL_TERMS[lawCode] ?? [] : [];
+  const topicTerms = LEGAL_TOPIC_TERMS.find(({ pattern }) => pattern.test(normalized))?.terms ?? [];
+  const germanTerms = [...new Set([...statuteTerms, ...topicTerms])];
+  // Preserve the user's wording as the primary query; the second query is a
+  // compact German legal expansion for cross-language and colloquial questions.
+  return [...new Set([normalized, ...(germanTerms.length ? [germanTerms.join(" OR ")] : [])])];
 }

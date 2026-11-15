@@ -1,0 +1,20 @@
+{
+  "name": "LegalMind multilingual German-law retrieval starter set",
+  "version": 1,
+  "status": "starter_only_requires_counsel_review_and_gold_chunk_ids",
+  "warning": "These are retrieval test prompts and statute targets, not legal advice or authoritative answer keys. Confirm current law, applicable versions, and expected provisions with qualified German counsel before scoring.",
+  "cases": [
+    {"id":"civil-sale-001","domain":"civil_contract","language":"de","question":"Welche Rechte hat ein Käufer bei einem Sachmangel?","expected_laws":["BGB"],"expected_provisions":["437","434","439"],"exclude_laws":["GewO"]},
+    {"id":"civil-sale-002","domain":"civil_contract","language":"ar","question":"اشتريت سيارة وظهر بها عيب بعد التسليم، ما الخيارات القانونية للمشتري؟","expected_laws":["BGB"],"expected_provisions":["437","434","439"],"exclude_laws":["GewO"]},
+    {"id":"civil-sale-003","domain":"civil_contract","language":"en","question":"When can a buyer rescind a German sale contract because of a defect?","expected_laws":["BGB"],"expected_provisions":["437","323","440","346"],"exclude_laws":["GewO"]},
+    {"id":"employment-dismissal-001","domain":"employment","language":"de","question":"Unter welchen Voraussetzungen ist eine ordentliche Kündigung sozial gerechtfertigt?","expected_laws":["KSchG"],"expected_provisions":["1","23"],"exclude_laws":["HGB"]},
+    {"id":"employment-dismissal-002","domain":"employment","language":"ar","question":"ما شروط فصل الموظف من صاحب العمل في ألمانيا وما دور قانون حماية الفصل؟","expected_laws":["KSchG","BGB"],"expected_provisions":["1","4","7","23","623"],"exclude_laws":["HGB"]},
+    {"id":"employment-dismissal-003","domain":"employment","language":"en","question":"Does a dismissal notice in Germany have to be in written form?","expected_laws":["BGB"],"expected_provisions":["623"],"exclude_laws":["HGB"]},
+    {"id":"criminal-theft-001","domain":"criminal","language":"de","question":"Welche Tatbestandsmerkmale hat der Diebstahl?","expected_laws":["StGB"],"expected_provisions":["242"]},
+    {"id":"criminal-theft-002","domain":"criminal","language":"ar","question":"ما أركان جريمة السرقة في القانون الجنائي الألماني؟","expected_laws":["StGB"],"expected_provisions":["242"]},
+    {"id":"criminal-fraud-001","domain":"criminal","language":"en","question":"What elements must be established for fraud under German criminal law?","expected_laws":["StGB"],"expected_provisions":["263"]},
+    {"id":"rental-001","domain":"rental","language":"de","question":"Welche Rechte bestehen bei Schimmel in der Mietwohnung?","expected_laws":["BGB"],"expected_provisions":["535","536"]},
+    {"id":"rental-002","domain":"rental","language":"ar","question":"هل يحق للمستأجر تخفيض الإيجار بسبب العفن في الشقة؟","expected_laws":["BGB"],"expected_provisions":["535","536"]},
+    {"id":"procedure-001","domain":"civil_procedure","language":"en","question":"What is the general burden of proof in German civil proceedings?","expected_laws":["ZPO"],"expected_provisions":[],"requires_counsel_gold_review":true}
+  ]
+}

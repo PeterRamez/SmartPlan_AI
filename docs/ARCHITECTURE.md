@@ -8,9 +8,9 @@ Browser -> Next.js App Router -> authenticated route handlers
 Google Drive -> discovery -> ingestion_jobs/files -> bounded batch processor
              -> extraction -> legal parser/chunker -> embeddings -> document_chunks
 Chat -> conversation context + language detect + legal query parser (law code / § number)
-     -> statute-filtered vector search + Postgres FTS + exact paragraph lookup
+     -> statute-filtered vector search + OR-expanded German Postgres FTS + exact paragraph lookup
      -> reciprocal-rank fusion + deterministic legal reranking
-     -> same-statute cross-reference expansion -> retrieved source IDs
+     -> same-statute-only cross-reference expansion (lower ranking weight than exact requested provisions) -> retrieved source IDs
      -> fact/issue/condition-grounded generation -> optional second-pass audit
      -> citation allow-list validation
 ```
@@ -39,3 +39,14 @@ The answer prompt requires the model to distinguish established facts, disputed 
 
 ## RAG evaluation and case analysis
 Staff can open `/rag-evaluation` to run a small exact-provision regression suite and inspect retrieved document, statute, paragraph, page, and chunk identifiers. The chat can include the previous eight messages from the same conversation as case context, and its optional structured case-analysis mode separates issues, established/disputed facts, legal rules, application, options, and missing facts. Conversation history is context only; legal rules must still come from retrieved statutory excerpts.
+
+
+## Retrieval V2 changes
+- The vector RPCs return a consistent candidate shape including `law_code` and `metadata`; this prevents statute identity from being lost during semantic ranking. Apply migration `0005_advanced_legal_retrieval.sql` after `0001`-`0004`.
+- Explicit statute references are enforced in SQL across vector, full-text, exact-provision, and cross-reference retrieval. Exact requested provisions receive a higher fusion weight than cross-reference candidates.
+- Cross-reference expansion is grouped by the source chunk's statute and never mixes § numbers across Acts.
+- German legal vocabulary expansions use web-search OR semantics; a long list of synonyms must not accidentally become an AND query that requires every synonym to occur in one chunk.
+- Deterministic reranking discounts common stop words and combines reciprocal-rank evidence, exact provision evidence, statute match, and lexical overlap. It is a ranking heuristic, not a learned legal reranker.
+
+## Release gate
+Do not describe retrieval as 9/10 or production-grade until the benchmark has been run against the actual tenant corpus. Track Recall@10, Precision@5, MRR, statute contamination rate, requested-provision recall, citation validity, citation entailment (human audited), and answer relevance. Split benchmark questions into development and held-out sets; do not tune on the held-out set.
