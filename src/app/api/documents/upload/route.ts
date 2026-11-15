@@ -64,8 +64,25 @@ export async function POST(req: Request) {
     }));
     phase = "saving-document-chunks";
     if (rows.length) {
-      const { error } = await supabase.from("document_chunks").insert(rows);
-      if (error) throw error;
+      // Keep each PostgREST transaction small. A single large insert makes
+      // PostgreSQL maintain the vector, full-text and tenant indexes for too
+      // many rows in one statement and can exceed Supabase statement_timeout.
+      const batchSize = 25;
+      for (let offset = 0; offset < rows.length; offset += batchSize) {
+        const batch = rows.slice(offset, offset + batchSize);
+        const { error } = await supabase.from("document_chunks").insert(batch);
+        if (error) {
+          console.error("[documents/upload] chunk batch failed", {
+            documentId: document.id,
+            batchStart: offset,
+            batchSize: batch.length,
+            totalChunks: rows.length,
+            code: error.code,
+            message: error.message,
+          });
+          throw error;
+        }
+      }
     }
     phase = "finalizing-document";
     const { error: updateError } = await supabase.from("legal_documents").update({

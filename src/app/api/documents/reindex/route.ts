@@ -30,8 +30,25 @@ export async function POST(request: Request) {
       metadata: chunk.metadata, embedding: vectors[index],
     }));
     if (rows.length) {
-      const { error: upsertError } = await supabase.from("document_chunks").upsert(rows, { onConflict: "document_id,chunk_index" });
-      if (upsertError) throw upsertError;
+      // Re-index in small transactions for the same reason as upload: each
+      // row updates HNSW, GIN, tenant and uniqueness indexes.
+      const batchSize = 25;
+      for (let offset = 0; offset < rows.length; offset += batchSize) {
+        const batch = rows.slice(offset, offset + batchSize);
+        const { error: upsertError } = await supabase.from("document_chunks")
+          .upsert(batch, { onConflict: "document_id,chunk_index" });
+        if (upsertError) {
+          console.error("[documents/reindex] chunk batch failed", {
+            documentId: document.id,
+            batchStart: offset,
+            batchSize: batch.length,
+            totalChunks: rows.length,
+            code: upsertError.code,
+            message: upsertError.message,
+          });
+          throw upsertError;
+        }
+      }
     }
     // Remove only stale tail chunks after the replacement chunks are safely written.
     const { error: staleError } = await supabase.from("document_chunks").delete()
